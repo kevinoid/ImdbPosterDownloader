@@ -77,6 +77,9 @@ dotnet_diagnostic.CA1506.severity = warning
 dotnet_diagnostic.CA1508.severity = warning
 # Warn "Invalid entry in code metrics configuration file"
 dotnet_diagnostic.CA1509.severity = warning
+# Ignore "Types can be made internal"
+# Prepare for likely future library split.
+dotnet_diagnostic.CA1515.severity = silent
 # Enable "Identifiers should differ by more than case" for public and internal
 # Having the private backing field for a property differ in case only is
 # common, satisfies capitalization conventions, and retains clarity.
