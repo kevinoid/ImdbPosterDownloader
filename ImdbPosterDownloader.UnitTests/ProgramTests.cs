@@ -2,7 +2,7 @@
 // Copyright 2019-2026 Kevin Locke.  All rights reserved.
 // </copyright>
 
-namespace NetCoreProject.UnitTests
+namespace ImdbPosterDownloader.UnitTests
 {
     using Xunit;
 

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Description>Unit tests for NetCoreProject.</Description>
+    <Description>Unit tests for ImdbPosterDownloader.</Description>
 
     <!-- Multi-target all frameworks to test, newest first (for VS runner) -->
     <TargetFrameworks>net10.0</TargetFrameworks>
@@ -88,7 +88,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\NetCoreProject\NetCoreProject.csproj" />
+    <ProjectReference Include="..\ImdbPosterDownloader\ImdbPosterDownloader.csproj" />
   </ItemGroup>
 
 </Project>

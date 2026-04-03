@@ -55,9 +55,9 @@
       https://spdx.org/spdx-specification-21-web-version#h.jxpfx0ykyb60
       https://spdx.org/licenses/ -->
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <ProjectUrl>https://github.com/kevinoid/NetCoreProject</ProjectUrl>
+    <ProjectUrl>https://github.com/kevinoid/ImdbPosterDownloader</ProjectUrl>
     <RepositoryType>git</RepositoryType>
-    <RepositoryUrl>https://github.com/kevinoid/NetCoreProject.git</RepositoryUrl>
+    <RepositoryUrl>https://github.com/kevinoid/ImdbPosterDownloader.git</RepositoryUrl>
 
     <!-- https://andrewlock.net/version-vs-versionsuffix-vs-packageversion-what-do-they-all-mean/ -->
     <VersionPrefix>1.0.0</VersionPrefix>

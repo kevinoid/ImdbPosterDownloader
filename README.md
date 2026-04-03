@@ -1,55 +1,37 @@
-.NET Core Project Template
-==========================
+IMDb Poster Downloader
+======================
 
-[![Build Status](https://img.shields.io/github/actions/workflow/status/kevinoid/NetCoreProject/dotnet.yml?branch=main&style=flat&label=build)](https://github.com/kevinoid/NetCoreProject/actions/workflows/dotnet.yml?query=branch%3Amain)
-[![Coverage](https://img.shields.io/codecov/c/github/kevinoid/NetCoreProject.svg?style=flat)](https://codecov.io/github/kevinoid/NetCoreProject?branch=main)
-[![.NET Version](https://img.shields.io/badge/.NET-netstandard2.0-informational.svg?style=flat)](https://www.nuget.org/packages/NetCoreProject)
-[![Version on NuGet](https://img.shields.io/nuget/v/NetCoreProject.svg?style=flat)](https://www.nuget.org/packages/NetCoreProject)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/kevinoid/ImdbPosterDownloader/dotnet.yml?branch=main&style=flat&label=build)](https://github.com/kevinoid/ImdbPosterDownloader/actions/workflows/dotnet.yml?query=branch%3Amain)
+[![Coverage](https://img.shields.io/codecov/c/github/kevinoid/ImdbPosterDownloader.svg?style=flat)](https://codecov.io/github/kevinoid/ImdbPosterDownloader?branch=main)
 
-A .NET Core project template with strict [code
-analysis](https://learn.microsoft.com/dotnet/fundamentals/code-analysis/overview)
-(with [StyleCop](https://github.com/DotNetAnalyzers/StyleCopAnalyzers),
-[Roslynator](https://github.com/dotnet/roslynator),
-[Sonar](https://github.com/SonarSource/sonar-dotnet), and others),
-[xUnit](https://xunit.net/),
-[Microsoft.Testing.Platform](https://learn.microsoft.com/dotnet/core/testing/microsoft-testing-platform-intro),
-[GitHub Actions CI](https://docs.github.com/en/actions),
-[Coverlet](https://github.com/tonerdo/coverlet),
-and [codecov](https://codecov.io/)/[coveralls](https://coveralls.io/).
-
-It is the template that I am using for my own C# projects, which represents my
-current preferences.  I am not advocating for these choices nor this template
-specifically, although I am happy to discuss or explain any choices made
-herein.  It is being published both for my own convenience and in case it may
-be useful to others with similar tastes.
+Tool to download movie/episode poster images from
+[IMDB](https://www.imdb.com/) using [Selenium](https://www.selenium.dev/).
 
 
 ## Introductory Example
 
-```csharp
+To download all episode posters for [Bob's
+Burgers](https://www.imdb.com/title/tt1561755/):
+
+```sh
+ImdbPosterDownloader https://www.imdb.com/title/tt1561755/episodes/
 ```
 
 
 ## Features
 
-* Feature 1
-* Feature 2
+* Can download posters for each episode of multi-episode shows.
 
 
 ## Installation
 
-[This package](https://www.nuget.org/packages/NetCoreProject) can be
-installed using [NuGet](https://www.nuget.org/) by running:
-
-```sh
-dotnet add package NetCoreProject
-```
+Currently this tool must be built from source.
 
 
 ## API Docs
 
 To use this module as a library, see the [API
-Documentation](https://kevinoid.github.io/NetCoreProject/api).
+Documentation](https://kevinoid.github.io/ImdbPosterDownloader/api).
 
 
 ## Contributing
@@ -65,6 +47,6 @@ for details.
 This project is available under the terms of the [MIT License](LICENSE.txt).
 See the [summary at TLDRLegal](https://tldrlegal.com/license/mit-license).
 
-The [template](https://github.com/kevinoid/NetCoreProject) upon which this
+The [template](https://github.com/kevinoid/ImdbPosterDownloader) upon which this
 project is based is available under the terms of
 [CC0 1.0 Universal](https://creativecommons.org/publicdomain/zero/1.0/).

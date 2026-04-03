@@ -1,23 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Description>.NET Core project template.</Description>
+    <Description>Tool to download movie/episode poster images from IMDb using Selenium BiDi.</Description>
 
-    <TargetFramework>netstandard2.0</TargetFramework>
-
-    <!-- Change to Exe to build an executable -->
-    <OutputType>Library</OutputType>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(OutputType)'=='Exe'">
-    <!-- Need a "concrete" framework (i.e. not netstandard) for Exe -->
     <TargetFramework>net10.0</TargetFramework>
 
+    <OutputType>Exe</OutputType>
+
     <!-- Configure class with Main method entry point -->
-    <StartupObject>NetCoreProject.Program</StartupObject>
+    <StartupObject>ImdbPosterDownloader.Program</StartupObject>
 
     <!-- Uncomment to embed a .ico file as the win32 icon resource -->
-    <!-- <ApplicationIcon>NetCoreProject.ico<ApplicationIcon> -->
+    <!-- <ApplicationIcon>ImdbPosterDownloader.ico<ApplicationIcon> -->
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -27,16 +21,6 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <DocumentationFile>bin\Release\$(TargetFramework)\$(AssemblyName).xml</DocumentationFile>
   </PropertyGroup>
-
-  <!--
-    For libraries, maintain public API in PublicApi.*.txt files to review API
-    changes using Microsoft.CodeAnalysis.PublicApiAnalyzers.
-    https://github.com/dotnet/roslyn-analyzers/blob/master/src/PublicApiAnalyzers/PublicApiAnalyzers.Help.md
-  -->
-  <ItemGroup Condition="'$(OutputType)'=='Library'">
-    <AdditionalFiles Include="PublicAPI.Shipped.txt" />
-    <AdditionalFiles Include="PublicAPI.Unshipped.txt" />
-  </ItemGroup>
 
   <ItemGroup>
     <None Remove="stylecop.json" />
@@ -75,11 +59,11 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <!-- TODO: Add Microsoft.EntityFrameworkCore.Analyzers for EF Core proj -->
     <PackageReference Include="Roslynator.Analyzers" Version="4.15.0">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="Selenium.WebDriver" Version="4.41.0" />
     <PackageReference Include="SonarAnalyzer.CSharp" Version="10.22.0.136894">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>

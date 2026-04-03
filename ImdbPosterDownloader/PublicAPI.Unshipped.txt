@@ -1,0 +1,3 @@
+#nullable enable
+ImdbPosterDownloader.Program
+static ImdbPosterDownloader.Program.Main(string![]! args) -> int
