@@ -64,7 +64,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Selenium.WebDriver" Version="4.41.0" />
-    <PackageReference Include="SonarAnalyzer.CSharp" Version="10.24.0.138807">
+    <PackageReference Include="SonarAnalyzer.CSharp" Version="10.25.0.139117">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
