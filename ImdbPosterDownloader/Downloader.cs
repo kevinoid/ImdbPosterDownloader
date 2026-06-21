@@ -7,34 +7,26 @@ namespace ImdbPosterDownloader
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
-    using System.Globalization;
-    using System.IO;
     using System.Linq;
-    using System.Text.RegularExpressions;
+    using System.Runtime.CompilerServices;
     using System.Threading;
     using System.Threading.Tasks;
     using System.Xml;
 
     using OpenQA.Selenium.BiDi;
     using OpenQA.Selenium.BiDi.BrowsingContext;
-    using OpenQA.Selenium.BiDi.Network;
     using OpenQA.Selenium.BiDi.Script;
 
     using BiDiDataType = OpenQA.Selenium.BiDi.Network.DataType;
 
-    public partial class Downloader(BrowsingContext context)
+    public class Downloader(BrowsingContext context)
     {
         private readonly BrowsingContext context = context ?? throw new ArgumentNullException(nameof(context));
         private readonly IBiDi biDi = context.BiDi;
 
-        [GeneratedRegex(
-            @"^\s*S\s*(?<season>[0-9]+)\.\s*E\s*(?<episode>[0-9]+)\s",
-            RegexOptions.CultureInvariant)]
-        private static partial Regex EpisodeNumRegex { get; }
-
-        public async Task DownloadEpisodesAsync(
+        public async IAsyncEnumerable<ImdbPoster> DownloadEpisodesAsync(
             string episodesUrl,
-            CancellationToken cancellationToken = default)
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(episodesUrl);
 
@@ -69,8 +61,12 @@ namespace ImdbPosterDownloader
                     .ConfigureAwait(false);
                 Debug.Assert(gotLoad, "Page load occurred");
 
-                await this.DownloadSeasonAsync(contextCreatedEnum, cancellationToken)
+                var posters = this.DownloadSeasonAsync(contextCreatedEnum, cancellationToken)
                     .ConfigureAwait(false);
+                await foreach (var poster in posters)
+                {
+                    yield return poster;
+                }
 
                 var nextSeasonBtns = await this.context.LocateNodesAsync(
                         new CssLocator("#next-season-btn"),
@@ -90,9 +86,9 @@ namespace ImdbPosterDownloader
             }
         }
 
-        private async Task DownloadSeasonAsync(
+        private async IAsyncEnumerable<ImdbPoster> DownloadSeasonAsync(
             IAsyncEnumerator<ContextCreatedEventArgs> contextCreatedEnum,
-            CancellationToken cancellationToken)
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             // FIXME: Wait for episodes to load, ads to load and page to settle.
             await Task.Delay(10000, cancellationToken).ConfigureAwait(false);
@@ -111,17 +107,19 @@ namespace ImdbPosterDownloader
 
             foreach (var episodeLink in episodeLinks.Nodes)
             {
-                await this.DownloadEpisodeAsync(episodeLink, contextCreatedEnum, cancellationToken)
-                    .ConfigureAwait(false);
+                var poster =
+                    await this.DownloadEpisodeAsync(episodeLink, contextCreatedEnum, cancellationToken)
+                        .ConfigureAwait(false);
+                yield return poster;
             }
         }
 
-        private async Task DownloadEpisodeAsync(
+        private async Task<ImdbPoster> DownloadEpisodeAsync(
             NodeRemoteValue episodeLink,
             IAsyncEnumerator<ContextCreatedEventArgs> contextCreatedEnum,
             CancellationToken cancellationToken)
         {
-            var (seasonNum, episodeNum) = ParseEpisodeLink(episodeLink);
+            string title = GetEpisodeLinkText(episodeLink);
 
             // Scroll the link into view, then click it.
             // Note: Navigating without clicking link causes captcha.
@@ -214,21 +212,14 @@ namespace ImdbPosterDownloader
                     imageResComp.Request.Request,
                     cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
-            Debug.Assert(
-                imageResComp.Response.MimeType.StartsWith("image/jpeg", StringComparison.Ordinal),
-                "Poster has image/jpeg Content-Type");
-            await File.WriteAllBytesAsync(
-                    $"S{seasonNum:D2}E{episodeNum:D2}-cover.jpg",
-                    ((Base64BytesValue)bytes).Value,
-                    cancellationToken)
-                .ConfigureAwait(false);
 
             await episodeContext.CloseAsync(cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
+
+            return new ImdbPoster(title, imageResComp.Response, bytes);
         }
 
-        private static (int Season, int Episode) ParseEpisodeLink(
-            NodeRemoteValue episodeLink)
+        private static string GetEpisodeLinkText(NodeRemoteValue episodeLink)
         {
             var episodeLinkDiv = episodeLink.Value!.Children!.Value
                 .Single(n => n.Value?.NodeType == (long)XmlNodeType.Element);
@@ -240,21 +231,7 @@ namespace ImdbPosterDownloader
             Debug.Assert(
                 episodeText.Value?.NodeType == (long)XmlNodeType.Text,
                 "Child node of episode link div is #text");
-            var episodeLinkStr = episodeText.Value.NodeValue!;
-            var seasonEpNumMatch = EpisodeNumRegex.Match(episodeLinkStr);
-            Debug.Assert(
-                seasonEpNumMatch.Success,
-                "Episode link text has expected format");
-            var seasonNum = int.Parse(
-                seasonEpNumMatch.Groups["season"].Value,
-                NumberStyles.None,
-                CultureInfo.InvariantCulture);
-            var episodeNum = int.Parse(
-                seasonEpNumMatch.Groups["episode"].Value,
-                NumberStyles.None,
-                CultureInfo.InvariantCulture);
-
-            return (seasonNum, episodeNum);
+            return episodeText.Value.NodeValue!;
         }
     }
 }

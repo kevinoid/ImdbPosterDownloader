@@ -5,13 +5,24 @@
 namespace ImdbPosterDownloader
 {
     using System;
+    using System.Diagnostics;
+    using System.Globalization;
+    using System.IO;
+    using System.Text.RegularExpressions;
+    using System.Threading;
     using System.Threading.Tasks;
 
     using OpenQA.Selenium.BiDi;
+    using OpenQA.Selenium.BiDi.Network;
     using OpenQA.Selenium.Firefox;
 
-    public static class Program
+    public static partial class Program
     {
+        [GeneratedRegex(
+            @"^\s*S\s*(?<season>[0-9]+)\.\s*E\s*(?<episode>[0-9]+)\s",
+            RegexOptions.CultureInvariant)]
+        private static partial Regex EpisodeNumRegex { get; }
+
         public static async Task<int> Main(string[] args)
         {
             ArgumentNullException.ThrowIfNull(args);
@@ -44,11 +55,41 @@ namespace ImdbPosterDownloader
             var downloader = new Downloader(context);
             foreach (var arg in args)
             {
-                await downloader.DownloadEpisodesAsync(arg)
-                    .ConfigureAwait(false);
+                var posters = downloader.DownloadEpisodesAsync(arg).ConfigureAwait(false);
+                await foreach (var poster in posters)
+                {
+                    await SavePoster(poster).ConfigureAwait(false);
+                }
             }
 
             return 0;
+        }
+
+        private static async Task SavePoster(
+            ImdbPoster poster,
+            CancellationToken cancellationToken = default)
+        {
+            var seasonEpNumMatch = EpisodeNumRegex.Match(poster.Title);
+            Debug.Assert(
+                seasonEpNumMatch.Success,
+                "Episode link text has expected format");
+            var seasonNum = int.Parse(
+                seasonEpNumMatch.Groups["season"].Value,
+                NumberStyles.None,
+                CultureInfo.InvariantCulture);
+            var episodeNum = int.Parse(
+                seasonEpNumMatch.Groups["episode"].Value,
+                NumberStyles.None,
+                CultureInfo.InvariantCulture);
+
+            Debug.Assert(
+                poster.Response.MimeType.StartsWith("image/jpeg", StringComparison.Ordinal),
+                "Poster has image/jpeg Content-Type");
+            await File.WriteAllBytesAsync(
+                    $"S{seasonNum:D2}E{episodeNum:D2}-cover.jpg",
+                    ((Base64BytesValue)poster.Bytes).Value,
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
     }
 }
