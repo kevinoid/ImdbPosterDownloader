@@ -46,7 +46,7 @@ namespace ImdbPosterDownloader
             var contextCreatedEnum = contextCreatedStream.GetAsyncEnumerator(cancellationToken);
             await using var contextCreatedEnumConf = contextCreatedEnum.ConfigureAwait(false);
 
-            var loadStream = await this.context.Load.StreamAsync(cancellationToken)
+            var loadStream = await this.biDi.BrowsingContext.Load.StreamAsync(cancellationToken)
                 .ConfigureAwait(false);
             await using var loadStreamConf = ((IAsyncDisposable)loadStream).ConfigureAwait(false);
             var loadEnum = loadStream.GetAsyncEnumerator(cancellationToken);
