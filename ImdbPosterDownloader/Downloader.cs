@@ -15,109 +15,22 @@ namespace ImdbPosterDownloader
     using System.Threading.Tasks;
     using System.Xml;
 
-    using OpenQA.Selenium;
     using OpenQA.Selenium.BiDi;
     using OpenQA.Selenium.BiDi.BrowsingContext;
     using OpenQA.Selenium.BiDi.Network;
     using OpenQA.Selenium.BiDi.Script;
-    using OpenQA.Selenium.Firefox;
 
     using BiDiDataType = OpenQA.Selenium.BiDi.Network.DataType;
 
-    public partial class Downloader : IAsyncDisposable, IDisposable
+    public partial class Downloader(BrowsingContext context)
     {
-        private readonly IWebDriver webDriver;
-        private readonly IBiDi biDi;
-        private readonly BrowsingContext context;
-        private bool disposedValue;
-
-        protected Downloader(
-            IWebDriver webDriver,
-            IBiDi biDi,
-            BrowsingContext context)
-        {
-            this.webDriver = webDriver ?? throw new ArgumentNullException(nameof(webDriver));
-            this.biDi = biDi ?? throw new ArgumentNullException(nameof(biDi));
-            this.context = context ?? throw new ArgumentNullException(nameof(context));
-        }
+        private readonly BrowsingContext context = context ?? throw new ArgumentNullException(nameof(context));
+        private readonly IBiDi biDi = context.BiDi;
 
         [GeneratedRegex(
             @"^\s*S\s*(?<season>[0-9]+)\.\s*E\s*(?<episode>[0-9]+)\s",
             RegexOptions.CultureInvariant)]
         private static partial Regex EpisodeNumRegex { get; }
-
-        public static Task<Downloader> CreateAsync(
-            CancellationToken cancellationToken = default)
-        {
-            var webDriver = new FirefoxDriver(new FirefoxOptions()
-            {
-                UseWebSocketUrl = true,
-            });
-
-            return CreateAsync(webDriver, cancellationToken);
-        }
-
-        public static async Task<Downloader> CreateAsync(
-            IWebDriver webDriver,
-            CancellationToken cancellationToken = default)
-        {
-            ArgumentNullException.ThrowIfNull(webDriver);
-
-            var biDi = await webDriver.AsBiDiAsync(cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-
-            // Use GetTreeAsync() to get the current BrowsingContext,
-            // instead of .CreateAsync(), which would open a new tab/window.
-            // This seems roundabout, but it's what the Selenium tests do:
-            // https://github.com/SeleniumHQ/selenium/blob/selenium-4.41.0/dotnet/test/common/BiDi/BiDiFixture.cs#L49
-            var initialTree =
-                await biDi.BrowsingContext.GetTreeAsync(cancellationToken: cancellationToken)
-                    .ConfigureAwait(false);
-            var context = initialTree.Contexts[0].Context;
-
-            return new Downloader(
-                webDriver,
-                biDi,
-                context);
-        }
-
-        public async ValueTask DisposeAsync()
-        {
-            // Perform async cleanup.
-            await this.DisposeAsyncCore().ConfigureAwait(false);
-
-            // Dispose of unmanaged resources.
-            this.Dispose(false);
-
-            // Suppress finalization.
-            GC.SuppressFinalize(this);
-        }
-
-        protected virtual async ValueTask DisposeAsyncCore()
-        {
-            await this.biDi.DisposeAsync().ConfigureAwait(false);
-        }
-
-        protected virtual void Dispose(bool disposing)
-        {
-            if (!this.disposedValue)
-            {
-                if (disposing)
-                {
-                    // dispose managed state (managed objects)
-                    this.webDriver.Dispose();
-                }
-
-                this.disposedValue = true;
-            }
-        }
-
-        public void Dispose()
-        {
-            // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
-            this.Dispose(disposing: true);
-            GC.SuppressFinalize(this);
-        }
 
         public async Task DownloadEpisodesAsync(
             string episodesUrl,
