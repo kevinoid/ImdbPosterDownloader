@@ -4,11 +4,34 @@
 
 namespace ImdbPosterDownloader
 {
+    using System;
+    using System.Threading.Tasks;
+
     public static class Program
     {
-        public static int Main(string[] args)
+        public static async Task<int> Main(string[] args)
         {
-            return args?.Length > 0 ? 1 : 0;
+            ArgumentNullException.ThrowIfNull(args);
+
+            if (args.Length == 0)
+            {
+                await Console.Error.WriteLineAsync(
+                    "Error: Expected at least one argument." + Environment.NewLine +
+                    "Usage: " + nameof(Downloader) + " <IMDb URL...>")
+                    .ConfigureAwait(false);
+                return 1;
+            }
+
+            var downloader = await Downloader.CreateAsync()
+                .ConfigureAwait(false);
+            await using var downloaderConf = downloader.ConfigureAwait(false);
+            foreach (var arg in args)
+            {
+                await downloader.DownloadEpisodesAsync(arg)
+                    .ConfigureAwait(false);
+            }
+
+            return 0;
         }
     }
 }

@@ -4,14 +4,24 @@
 
 namespace ImdbPosterDownloader.UnitTests
 {
+    using System;
+    using System.Threading.Tasks;
+
     using Xunit;
 
     public static class ProgramTests
     {
         [Fact]
-        public static void Returns0OnEmpty()
+        public static async Task MainThrowsOnNull()
         {
-            Assert.Equal(0, Program.Main([]));
+            await Assert.ThrowsAsync<ArgumentNullException>("args", () => Program.Main(null!));
+        }
+
+        [Fact]
+        public static async Task MainReturns1OnEmpty()
+        {
+            var exitCode = await Program.Main([]);
+            Assert.Equal(1, exitCode);
         }
     }
 }
