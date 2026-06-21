@@ -131,9 +131,6 @@ namespace ImdbPosterDownloader
             await this.context.ScrollIntoViewAsync(episodeLink, false, cancellationToken)
                 .ConfigureAwait(false);
 
-            // Wait for scroll to complete
-            await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
-
             // Note: Button 1 (middle) to open in new window
             await this.context.ClickAsync(episodeLink, 1, cancellationToken).ConfigureAwait(false);
 
