@@ -93,8 +93,13 @@ namespace ImdbPosterDownloader
             // FIXME: Wait for episodes to load, ads to load and page to settle.
             await Task.Delay(10000, cancellationToken).ConfigureAwait(false);
 
+            // Note: a.ipc-title-link-wrapper also used for heading links:
+            // "Contribute to this page"
+            // "User lists"
+            // "User polls"
+            // .episode-item-wrapper ancestor matches only episode title links
             var episodeLinks = await this.context.LocateNodesAsync(
-                    new CssLocator("a.ipc-title-link-wrapper"),
+                    new CssLocator(".episode-item-wrapper a.ipc-title-link-wrapper"),
                     new LocateNodesOptions
                     {
                         SerializationOptions = new SerializationOptions
