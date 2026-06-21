@@ -6,9 +6,7 @@ namespace ImdbPosterDownloader
 {
     using System;
     using System.Diagnostics;
-    using System.Globalization;
     using System.IO;
-    using System.Text.RegularExpressions;
     using System.Threading;
     using System.Threading.Tasks;
 
@@ -16,13 +14,8 @@ namespace ImdbPosterDownloader
     using OpenQA.Selenium.BiDi.Network;
     using OpenQA.Selenium.Firefox;
 
-    public static partial class Program
+    public static class Program
     {
-        [GeneratedRegex(
-            @"^\s*S\s*(?<season>[0-9]+)\.\s*E\s*(?<episode>[0-9]+)\s",
-            RegexOptions.CultureInvariant)]
-        private static partial Regex EpisodeNumRegex { get; }
-
         public static async Task<int> Main(string[] args)
         {
             ArgumentNullException.ThrowIfNull(args);
@@ -69,24 +62,11 @@ namespace ImdbPosterDownloader
             ImdbPoster poster,
             CancellationToken cancellationToken = default)
         {
-            var seasonEpNumMatch = EpisodeNumRegex.Match(poster.Title);
-            Debug.Assert(
-                seasonEpNumMatch.Success,
-                "Episode link text has expected format");
-            var seasonNum = int.Parse(
-                seasonEpNumMatch.Groups["season"].Value,
-                NumberStyles.None,
-                CultureInfo.InvariantCulture);
-            var episodeNum = int.Parse(
-                seasonEpNumMatch.Groups["episode"].Value,
-                NumberStyles.None,
-                CultureInfo.InvariantCulture);
-
             Debug.Assert(
                 poster.Response.MimeType.StartsWith("image/jpeg", StringComparison.Ordinal),
                 "Poster has image/jpeg Content-Type");
             await File.WriteAllBytesAsync(
-                    $"S{seasonNum:D2}E{episodeNum:D2}-cover.jpg",
+                    $"S{poster.Title}.jpg",
                     ((Base64BytesValue)poster.Bytes).Value,
                     cancellationToken)
                 .ConfigureAwait(false);
