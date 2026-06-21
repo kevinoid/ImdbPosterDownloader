@@ -21,6 +21,9 @@ namespace ImdbPosterDownloader
 
     public class Downloader(BrowsingContext context)
     {
+        private static readonly TimeSpan ContextCreatedTimeout = TimeSpan.FromSeconds(10);
+        private static readonly TimeSpan LoadTimeout = TimeSpan.FromSeconds(60);
+
         private readonly BrowsingContext context = context ?? throw new ArgumentNullException(nameof(context));
         private readonly IBiDi biDi = context.BiDi;
 
@@ -37,30 +40,26 @@ namespace ImdbPosterDownloader
                     .ConfigureAwait(false);
             await using var contextCreatedStreamConf =
                 ((IAsyncDisposable)contextCreatedStream).ConfigureAwait(false);
-            var contextCreatedEnum = contextCreatedStream.GetAsyncEnumerator(cancellationToken);
+            var contextCreatedEnum = contextCreatedStream.WithTimeout(ContextCreatedTimeout)
+                .GetAsyncEnumerator(cancellationToken);
             await using var contextCreatedEnumConf = contextCreatedEnum.ConfigureAwait(false);
 
             var loadStream = await this.biDi.BrowsingContext.Load.StreamAsync(cancellationToken)
                 .ConfigureAwait(false);
             await using var loadStreamConf = ((IAsyncDisposable)loadStream).ConfigureAwait(false);
-            var loadEnum = loadStream.GetAsyncEnumerator(cancellationToken);
+            var loadEnum = loadStream.WithTimeout(LoadTimeout)
+                .GetAsyncEnumerator(cancellationToken);
             await using var loadEnumConf = loadEnum.ConfigureAwait(false);
 
             await this.context.NavigateAsync(episodesUrl, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
 
-            var gotChannel = await contextCreatedEnum.MoveNextAsync()
-                .AsTask()
-                .WaitAsync(TimeSpan.FromSeconds(10), cancellationToken)
-                .ConfigureAwait(false);
+            var gotChannel = await contextCreatedEnum.MoveNextAsync().ConfigureAwait(false);
             Debug.Assert(gotChannel, "A new tab was opened");
 
             while (true)
             {
-                var gotLoad = await loadEnum.MoveNextAsync()
-                    .AsTask()
-                    .WaitAsync(TimeSpan.FromSeconds(60), cancellationToken)
-                    .ConfigureAwait(false);
+                var gotLoad = await loadEnum.MoveNextAsync().ConfigureAwait(false);
                 Debug.Assert(gotLoad, "Page load occurred");
 
                 var posters = this.DownloadSeasonAsync(contextCreatedEnum, cancellationToken)
@@ -144,7 +143,6 @@ namespace ImdbPosterDownloader
 
             var gotEpisodeContext = await contextCreatedEnum
                 .MoveNextUntilAsync(context => context.Parent == null)
-                .WaitAsync(TimeSpan.FromSeconds(10), cancellationToken)
                 .ConfigureAwait(false);
             Debug.Assert(gotEpisodeContext, "A new tab was opened for the episode");
             var episodeContext = contextCreatedEnum.Current.Context;
@@ -154,16 +152,14 @@ namespace ImdbPosterDownloader
                     .ConfigureAwait(false);
             await using var episodeLoadStreamConf =
                 ((IAsyncDisposable)episodeLoadStream).ConfigureAwait(false);
-            var episodeLoadEnum = episodeLoadStream.GetAsyncEnumerator(cancellationToken);
+            var episodeLoadEnum = episodeLoadStream.WithTimeout(LoadTimeout)
+                .GetAsyncEnumerator(cancellationToken);
             await using var episodeLoadEnumConf = episodeLoadEnum.ConfigureAwait(false);
 
             await episodeContext.ActivateAsync(cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
 
-            var gotEpisodeLoad = await episodeLoadEnum.MoveNextAsync()
-                .AsTask()
-                .WaitAsync(TimeSpan.FromSeconds(60), cancellationToken)
-                .ConfigureAwait(false);
+            var gotEpisodeLoad = await episodeLoadEnum.MoveNextAsync().ConfigureAwait(false);
             Debug.Assert(gotEpisodeLoad, "Page load occurred in episode tab");
 
             var posterLinks = await episodeContext.LocateNodesAsync(
@@ -191,10 +187,7 @@ namespace ImdbPosterDownloader
             await episodeContext.ClickAsync(posterLink, 0, cancellationToken)
                 .ConfigureAwait(false);
 
-            var gotPosterLoad = await episodeLoadEnum.MoveNextAsync()
-                .AsTask()
-                .WaitAsync(TimeSpan.FromSeconds(60), cancellationToken)
-                .ConfigureAwait(false);
+            var gotPosterLoad = await episodeLoadEnum.MoveNextAsync().ConfigureAwait(false);
             Debug.Assert(gotEpisodeLoad, "Page load occurred in episode tab");
 
             var mediaImgs = await episodeContext.LocateNodesAsync(
@@ -210,13 +203,13 @@ namespace ImdbPosterDownloader
                 new Uri(lightboxImgSource, UriKind.Absolute);
             }
 
-            var imageResComp =
-                await responseCompletedStream.FirstAsync(
-                        rc => lightboxImgSourceSet.Contains(rc.Response.Url),
-                        cancellationToken)
-                    .AsTask()
-                    .WaitAsync(TimeSpan.FromSeconds(10), cancellationToken)
-                    .ConfigureAwait(false);
+            using var linkedSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var imageResComp = await responseCompletedStream.FirstAsync(
+                    rc => lightboxImgSourceSet.Contains(rc.Response.Url),
+                    linkedSource.Token)
+                .AsTask()
+                .WaitCancelAsync(LoadTimeout, linkedSource)
+                .ConfigureAwait(false);
             var bytes = await this.context.BiDi.Network.GetDataAsync(
                     BiDiDataType.Response,
                     imageResComp.Request.Request,
