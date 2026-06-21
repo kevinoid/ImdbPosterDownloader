@@ -47,8 +47,8 @@ namespace ImdbPosterDownloader
             // https://github.com/w3c/webdriver-bidi/issues/543
             // https://github.com/w3c/webdriver-bidi/issues/544
             var scrollResult = await context.Script.CallFunctionAsync(
-                    "(elem, alignToTop) => elem.scrollIntoView(alignToTop)",
-                    false,
+                    "(elem, alignToTop) => elem.scrollIntoView({ behavior: 'instant', block: alignToTop ? 'start' : 'end' })",
+                    true,
                     new CallFunctionOptions
                     {
                         Arguments = [
