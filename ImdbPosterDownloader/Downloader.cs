@@ -24,6 +24,8 @@ namespace ImdbPosterDownloader
         private readonly BrowsingContext context = context ?? throw new ArgumentNullException(nameof(context));
         private readonly IBiDi biDi = context.BiDi;
 
+        public Predicate<string>? TitleFilter { get; set; }
+
         public async IAsyncEnumerable<ImdbPoster> DownloadEpisodesAsync(
             string episodesUrl,
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -112,20 +114,26 @@ namespace ImdbPosterDownloader
 
             foreach (var episodeLink in episodeLinks.Nodes)
             {
-                var poster =
-                    await this.DownloadEpisodeAsync(episodeLink, contextCreatedEnum, cancellationToken)
+                string episodeTitle = GetEpisodeLinkText(episodeLink);
+
+                if (this.TitleFilter == null || this.TitleFilter(episodeTitle))
+                {
+                    yield return await this.DownloadEpisodeAsync(
+                            episodeLink,
+                            episodeTitle,
+                            contextCreatedEnum,
+                            cancellationToken)
                         .ConfigureAwait(false);
-                yield return poster;
+                }
             }
         }
 
         private async Task<ImdbPoster> DownloadEpisodeAsync(
             NodeRemoteValue episodeLink,
+            string episodeTitle,
             IAsyncEnumerator<ContextCreatedEventArgs> contextCreatedEnum,
             CancellationToken cancellationToken)
         {
-            string title = GetEpisodeLinkText(episodeLink);
-
             // Scroll the link into view, then click it.
             // Note: Navigating without clicking link causes captcha.
             await this.context.ScrollIntoViewAsync(episodeLink, false, cancellationToken)
@@ -218,7 +226,7 @@ namespace ImdbPosterDownloader
             await episodeContext.CloseAsync(cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
 
-            return new ImdbPoster(title, imageResComp.Response, bytes);
+            return new ImdbPoster(episodeTitle, imageResComp.Response, bytes);
         }
 
         private static string GetEpisodeLinkText(NodeRemoteValue episodeLink)
