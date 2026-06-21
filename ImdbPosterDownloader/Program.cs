@@ -45,7 +45,10 @@ namespace ImdbPosterDownloader
             var initialTree = await biDi.BrowsingContext.GetTreeAsync().ConfigureAwait(false);
             var context = initialTree.Contexts[0].Context;
 
-            var downloader = new Downloader(context);
+            var downloader = new Downloader(context)
+            {
+                TitleFilter = (title) => !File.Exists($"S{title}.jpg"),
+            };
             foreach (var arg in args)
             {
                 var posters = downloader.DownloadEpisodesAsync(arg).ConfigureAwait(false);
