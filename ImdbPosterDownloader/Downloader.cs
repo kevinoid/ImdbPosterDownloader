@@ -59,6 +59,7 @@ namespace ImdbPosterDownloader
 
             while (true)
             {
+                // Note: Wait for load event to reduce page movement from ad loading.
                 var gotLoad = await loadEnum.MoveNextAsync().ConfigureAwait(false);
                 Debug.Assert(gotLoad, "Page load occurred");
 
@@ -147,20 +148,20 @@ namespace ImdbPosterDownloader
             Debug.Assert(gotEpisodeContext, "A new tab was opened for the episode");
             var episodeContext = contextCreatedEnum.Current.Context;
 
-            var episodeLoadStream =
-                await episodeContext.Load.StreamAsync(cancellationToken)
+            var episodeDomLoadStream =
+                await episodeContext.DomContentLoaded.StreamAsync(cancellationToken)
                     .ConfigureAwait(false);
-            await using var episodeLoadStreamConf =
-                ((IAsyncDisposable)episodeLoadStream).ConfigureAwait(false);
-            var episodeLoadEnum = episodeLoadStream.WithTimeout(LoadTimeout)
+            await using var episodeDomLoadStreamConf =
+                ((IAsyncDisposable)episodeDomLoadStream).ConfigureAwait(false);
+            var episodeDomLoadEnum = episodeDomLoadStream.WithTimeout(LoadTimeout)
                 .GetAsyncEnumerator(cancellationToken);
-            await using var episodeLoadEnumConf = episodeLoadEnum.ConfigureAwait(false);
+            await using var episodeDomLoadEnumConf = episodeDomLoadEnum.ConfigureAwait(false);
 
             await episodeContext.ActivateAsync(cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
 
-            var gotEpisodeLoad = await episodeLoadEnum.MoveNextAsync().ConfigureAwait(false);
-            Debug.Assert(gotEpisodeLoad, "Page load occurred in episode tab");
+            var gotEpisodeDomLoad = await episodeDomLoadEnum.MoveNextAsync().ConfigureAwait(false);
+            Debug.Assert(gotEpisodeDomLoad, "DOMContentLoaded occurred in episode tab");
 
             var posterLinks = await episodeContext.LocateNodesAsync(
                     new CssLocator("main .ipc-poster > a"),
@@ -187,8 +188,8 @@ namespace ImdbPosterDownloader
             await episodeContext.ClickAsync(posterLink, 0, cancellationToken)
                 .ConfigureAwait(false);
 
-            var gotPosterLoad = await episodeLoadEnum.MoveNextAsync().ConfigureAwait(false);
-            Debug.Assert(gotEpisodeLoad, "Page load occurred in episode tab");
+            var gotPosterDomLoad = await episodeDomLoadEnum.MoveNextAsync().ConfigureAwait(false);
+            Debug.Assert(gotPosterDomLoad, "DOMContentLoaded occurred in episode tab");
 
             var mediaImgs = await episodeContext.LocateNodesAsync(
                     new CssLocator(".media-viewer img:not(.peek)"),
