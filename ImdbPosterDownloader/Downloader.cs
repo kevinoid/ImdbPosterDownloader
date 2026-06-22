@@ -118,12 +118,26 @@ namespace ImdbPosterDownloader
 
                 if (this.TitleFilter == null || this.TitleFilter(episodeTitle))
                 {
-                    yield return await this.DownloadEpisodeAsync(
-                            episodeLink,
-                            episodeTitle,
-                            contextCreatedEnum,
-                            cancellationToken)
-                        .ConfigureAwait(false);
+                    ImdbPoster? poster = null;
+                    try
+                    {
+                        poster = await this.DownloadEpisodeAsync(
+                                episodeLink,
+                                episodeTitle,
+                                contextCreatedEnum,
+                                cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                    catch (MissingPosterException)
+                    {
+                        // It is likely that subsequent episodes do not have posters either.
+                        // However, continue in case any does.
+                    }
+
+                    if (poster != null)
+                    {
+                        yield return poster;
+                    }
                 }
             }
         }
@@ -167,6 +181,11 @@ namespace ImdbPosterDownloader
                     new CssLocator("main .ipc-poster > a"),
                     cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
+            if (posterLinks.Nodes.Length == 0)
+            {
+                throw new MissingPosterException();
+            }
+
             var posterLink = posterLinks.Nodes.Single();
 
             var responseCompletedStream =
