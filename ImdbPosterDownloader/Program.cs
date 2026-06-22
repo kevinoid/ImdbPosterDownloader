@@ -7,6 +7,7 @@ namespace ImdbPosterDownloader
     using System;
     using System.Diagnostics;
     using System.IO;
+    using System.Text.RegularExpressions;
     using System.Threading;
     using System.Threading.Tasks;
 
@@ -16,6 +17,10 @@ namespace ImdbPosterDownloader
 
     public static class Program
     {
+        private static readonly Regex InvalidFileNameCharRegex = new(
+            CharsToRegexSet(Path.GetInvalidFileNameChars()),
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
         public static async Task<int> Main(string[] args)
         {
             ArgumentNullException.ThrowIfNull(args);
@@ -47,7 +52,7 @@ namespace ImdbPosterDownloader
 
             var downloader = new Downloader(context)
             {
-                TitleFilter = (title) => !File.Exists($"S{title}.jpg"),
+                TitleFilter = (title) => !File.Exists(GetPosterFilename(title)),
             };
             foreach (var arg in args)
             {
@@ -61,6 +66,18 @@ namespace ImdbPosterDownloader
             return 0;
         }
 
+        private static string CharsToRegexSet(char[] chars)
+        {
+            var str = new string(chars);
+            var escaped = Regex.Escape(str).Replace("]", "\\]", StringComparison.Ordinal);
+            return $"[{escaped}]";
+        }
+
+        private static string GetPosterFilename(string title)
+        {
+            return InvalidFileNameCharRegex.Replace(title, "-") + ".jpg";
+        }
+
         private static async Task SavePoster(
             ImdbPoster poster,
             CancellationToken cancellationToken = default)
@@ -69,7 +86,7 @@ namespace ImdbPosterDownloader
                 poster.Response.MimeType.StartsWith("image/jpeg", StringComparison.Ordinal),
                 "Poster has image/jpeg Content-Type");
             await File.WriteAllBytesAsync(
-                    $"S{poster.Title}.jpg",
+                    GetPosterFilename(poster.Title),
                     ((Base64BytesValue)poster.Bytes).Value,
                     cancellationToken)
                 .ConfigureAwait(false);
