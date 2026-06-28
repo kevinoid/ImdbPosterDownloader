@@ -7,6 +7,7 @@ namespace ImdbPosterDownloader
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
+    using System.Diagnostics.CodeAnalysis;
     using System.Linq;
     using System.Runtime.CompilerServices;
     using System.Threading;
@@ -85,6 +86,26 @@ namespace ImdbPosterDownloader
 
                 await this.context.ClickAsync(nextSeasonBtn, 0, cancellationToken)
                     .ConfigureAwait(false);
+            }
+        }
+
+        [SuppressMessage(
+            "Microsoft.Design",
+            "CA1054:UriParametersShouldNotBeStrings",
+            Justification = "Private method which validates that the string is a Uri")]
+        [SuppressMessage(
+            "Microsoft.Usage",
+            "CA1806:DoNotIgnoreMethodResults",
+            Justification = "Uri constructor used for validation")]
+        private static void AssertAbsoluteUri(string uri, string uriName)
+        {
+            try
+            {
+                new Uri(uri, UriKind.Absolute);
+            }
+            catch (FormatException ex)
+            {
+                throw new FormatException($"${uriName} must be absolute", ex);
             }
         }
 
@@ -230,13 +251,13 @@ namespace ImdbPosterDownloader
                     cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             var lightboxImg = mediaImgs.Nodes.Single();
-            var lightboxImgSourceSet = lightboxImg.Value!.GetSourceSet().ToHashSet();
-
-            // Check that all image source URLs are absolute
-            foreach (var lightboxImgSource in lightboxImgSourceSet)
-            {
-                new Uri(lightboxImgSource, UriKind.Absolute);
-            }
+            var lightboxImgSourceSet = lightboxImg.Value!.GetSourceSet()
+                .Select(srcsetUrl =>
+                {
+                    AssertAbsoluteUri(srcsetUrl, "Poster srcset URL");
+                    return srcsetUrl;
+                })
+                .ToHashSet();
 
             using var linkedSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var imageResComp = await responseCompletedStream.FirstAsync(
