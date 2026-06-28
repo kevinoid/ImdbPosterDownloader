@@ -221,7 +221,7 @@ namespace ImdbPosterDownloader
 
         private async Task<ImdbPoster> DownloadTitleAsyncCore(
             BrowsingContext episodeContext,
-            string episodeTitle,
+            string? episodeTitle,
             CancellationToken cancellationToken)
         {
             var episodeDomLoadStream =
@@ -238,6 +238,28 @@ namespace ImdbPosterDownloader
 
             var gotEpisodeDomLoad = await episodeDomLoadEnum.MoveNextAsync().ConfigureAwait(false);
             Debug.Assert(gotEpisodeDomLoad, "DOMContentLoaded occurred in episode tab");
+
+            if (string.IsNullOrWhiteSpace(episodeTitle))
+            {
+                // Note: locateNodes doesn't match text() nodes.
+                // Get element nodes and extract
+                var h1Nodes = await episodeContext.LocateNodesAsync(
+                        new CssLocator("h1"),
+                        new LocateNodesOptions
+                        {
+                            SerializationOptions = new SerializationOptions
+                            {
+                                MaxDomDepth = 10,
+                            },
+                        },
+                        cancellationToken: cancellationToken)
+                    .ConfigureAwait(false);
+                var h1Node = h1Nodes.Nodes.Single();
+                var h1Texts = h1Node.GetDescendants()
+                    .Where(node => node.Value?.NodeType == (long)XmlNodeType.Text)
+                    .Select(textNode => textNode.Value!.NodeValue);
+                episodeTitle = string.Concat(h1Texts).Trim();
+            }
 
             var posterLinks = await episodeContext.LocateNodesAsync(
                     new CssLocator("main .ipc-poster > a"),
