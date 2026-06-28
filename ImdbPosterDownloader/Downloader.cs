@@ -88,6 +88,21 @@ namespace ImdbPosterDownloader
             }
         }
 
+        private static string GetEpisodeLinkText(NodeRemoteValue episodeLink)
+        {
+            var episodeLinkDiv = episodeLink.Value!.Children!.Value
+                .Single(n => n.Value?.NodeType == (long)XmlNodeType.Element);
+            Debug.Assert(
+                episodeLinkDiv.Value!.LocalName == "div",
+                "Child element of episode link is a <div>");
+
+            var episodeText = episodeLinkDiv.Value!.Children!.Value.Single();
+            Debug.Assert(
+                episodeText.Value?.NodeType == (long)XmlNodeType.Text,
+                "Child node of episode link div is #text");
+            return episodeText.Value.NodeValue!;
+        }
+
         private async IAsyncEnumerable<ImdbPoster> DownloadSeasonAsync(
             IAsyncEnumerator<ContextCreatedEventArgs> contextCreatedEnum,
             [EnumeratorCancellation] CancellationToken cancellationToken)
@@ -240,21 +255,6 @@ namespace ImdbPosterDownloader
                 .ConfigureAwait(false);
 
             return new ImdbPoster(episodeTitle, imageResComp.Response, bytes);
-        }
-
-        private static string GetEpisodeLinkText(NodeRemoteValue episodeLink)
-        {
-            var episodeLinkDiv = episodeLink.Value!.Children!.Value
-                .Single(n => n.Value?.NodeType == (long)XmlNodeType.Element);
-            Debug.Assert(
-                episodeLinkDiv.Value!.LocalName == "div",
-                "Child element of episode link is a <div>");
-
-            var episodeText = episodeLinkDiv.Value!.Children!.Value.Single();
-            Debug.Assert(
-                episodeText.Value?.NodeType == (long)XmlNodeType.Text,
-                "Child node of episode link div is #text");
-            return episodeText.Value.NodeValue!;
         }
     }
 }
