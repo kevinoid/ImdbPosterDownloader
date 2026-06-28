@@ -47,6 +47,29 @@ namespace ImdbPosterDownloader
             return this.DownloadEpisodesAsyncCore(episodesUrl, cancellationToken);
         }
 
+        public async Task<ImdbPoster> DownloadTitleAsync(
+            Uri titleUrl,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(titleUrl);
+
+            if (!titleUrl.IsAbsoluteUri)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(titleUrl),
+                    titleUrl,
+                    "Must be an absolute URI");
+            }
+
+            await this.context.NavigateAsync(
+                    titleUrl.ToString(),
+                    cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+
+            return await this.DownloadTitleAsyncCore(this.context, null, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         [SuppressMessage(
             "Microsoft.Design",
             "CA1054:UriParametersShouldNotBeStrings",
