@@ -21,6 +21,10 @@ namespace ImdbPosterDownloader
     public sealed class TimeoutAsyncEnumerable<T> : IAsyncEnumerable<T>
     {
         private readonly IAsyncEnumerable<T> source;
+        [SuppressMessage(
+            "Style",
+            "IDE0032:Use auto property",
+            Justification = "Validation in setter requires backing field before C# 14")]
         private TimeSpan timeout;
 
         public TimeoutAsyncEnumerable(IAsyncEnumerable<T> source, TimeSpan timeout)
