@@ -215,6 +215,15 @@ namespace ImdbPosterDownloader
             Debug.Assert(gotEpisodeContext, "A new tab was opened for the episode");
             var episodeContext = contextCreatedEnum.Current.Context;
 
+            return await this.DownloadTitleAsyncCore(episodeContext, episodeTitle, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        private async Task<ImdbPoster> DownloadTitleAsyncCore(
+            BrowsingContext episodeContext,
+            string episodeTitle,
+            CancellationToken cancellationToken)
+        {
             var episodeDomLoadStream =
                 await episodeContext.DomContentLoaded.StreamAsync(cancellationToken)
                     .ConfigureAwait(false);
