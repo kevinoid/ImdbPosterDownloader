@@ -31,10 +31,18 @@ namespace ImdbPosterDownloader
         public Predicate<string>? TitleFilter { get; set; }
 
         public async IAsyncEnumerable<ImdbPoster> DownloadEpisodesAsync(
-            string episodesUrl,
+            Uri episodesUrl,
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(episodesUrl);
+            ArgumentNullException.ThrowIfNull(episodesUrl);
+
+            if (!episodesUrl.IsAbsoluteUri)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(episodesUrl),
+                    episodesUrl,
+                    "Must be an absolute URI");
+            }
 
             var contextCreatedStream =
                 await this.biDi.BrowsingContext.ContextCreated.StreamAsync(cancellationToken)
@@ -52,7 +60,9 @@ namespace ImdbPosterDownloader
                 .GetAsyncEnumerator(cancellationToken);
             await using var loadEnumConf = loadEnum.ConfigureAwait(false);
 
-            await this.context.NavigateAsync(episodesUrl, cancellationToken: cancellationToken)
+            await this.context.NavigateAsync(
+                    episodesUrl.ToString(),
+                    cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
 
             var gotChannel = await contextCreatedEnum.MoveNextAsync().ConfigureAwait(false);

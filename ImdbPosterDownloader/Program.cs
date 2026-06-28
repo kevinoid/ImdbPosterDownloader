@@ -7,6 +7,7 @@ namespace ImdbPosterDownloader
     using System;
     using System.Diagnostics;
     using System.IO;
+    using System.Linq;
     using System.Text.RegularExpressions;
     using System.Threading;
     using System.Threading.Tasks;
@@ -34,6 +35,9 @@ namespace ImdbPosterDownloader
                 return 1;
             }
 
+            // Validate arguments early to avoid browser startup on error
+            var imdbUrls = args.Select(arg => new Uri(arg, UriKind.Absolute)).ToArray();
+
             var webDriver = new FirefoxDriver(new FirefoxOptions()
             {
                 UseWebSocketUrl = true,
@@ -54,9 +58,9 @@ namespace ImdbPosterDownloader
             {
                 TitleFilter = (title) => !File.Exists(GetPosterFilename(title)),
             };
-            foreach (var arg in args)
+            foreach (var imdbUrl in imdbUrls)
             {
-                var posters = downloader.DownloadEpisodesAsync(arg).ConfigureAwait(false);
+                var posters = downloader.DownloadEpisodesAsync(imdbUrl).ConfigureAwait(false);
                 await foreach (var poster in posters)
                 {
                     await SavePoster(poster).ConfigureAwait(false);
