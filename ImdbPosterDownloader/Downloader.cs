@@ -30,9 +30,9 @@ namespace ImdbPosterDownloader
 
         public Predicate<string>? TitleFilter { get; set; }
 
-        public async IAsyncEnumerable<ImdbPoster> DownloadEpisodesAsync(
+        public IAsyncEnumerable<ImdbPoster> DownloadEpisodesAsync(
             Uri episodesUrl,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(episodesUrl);
 
@@ -44,6 +44,48 @@ namespace ImdbPosterDownloader
                     "Must be an absolute URI");
             }
 
+            return this.DownloadEpisodesAsyncCore(episodesUrl, cancellationToken);
+        }
+
+        [SuppressMessage(
+            "Microsoft.Design",
+            "CA1054:UriParametersShouldNotBeStrings",
+            Justification = "Private method which validates that the string is a Uri")]
+        [SuppressMessage(
+            "Microsoft.Usage",
+            "CA1806:DoNotIgnoreMethodResults",
+            Justification = "Uri constructor used for validation")]
+        private static void AssertAbsoluteUri(string uri, string uriName)
+        {
+            try
+            {
+                new Uri(uri, UriKind.Absolute);
+            }
+            catch (FormatException ex)
+            {
+                throw new FormatException($"${uriName} must be absolute", ex);
+            }
+        }
+
+        private static string GetEpisodeLinkText(NodeRemoteValue episodeLink)
+        {
+            var episodeLinkDiv = episodeLink.Value!.Children!.Value
+                .Single(n => n.Value?.NodeType == (long)XmlNodeType.Element);
+            Debug.Assert(
+                episodeLinkDiv.Value!.LocalName == "div",
+                "Child element of episode link is a <div>");
+
+            var episodeText = episodeLinkDiv.Value!.Children!.Value.Single();
+            Debug.Assert(
+                episodeText.Value?.NodeType == (long)XmlNodeType.Text,
+                "Child node of episode link div is #text");
+            return episodeText.Value.NodeValue!;
+        }
+
+        private async IAsyncEnumerable<ImdbPoster> DownloadEpisodesAsyncCore(
+            Uri episodesUrl,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
             var contextCreatedStream =
                 await this.biDi.BrowsingContext.ContextCreated.StreamAsync(cancellationToken)
                     .ConfigureAwait(false);
@@ -97,41 +139,6 @@ namespace ImdbPosterDownloader
                 await this.context.ClickAsync(nextSeasonBtn, 0, cancellationToken)
                     .ConfigureAwait(false);
             }
-        }
-
-        [SuppressMessage(
-            "Microsoft.Design",
-            "CA1054:UriParametersShouldNotBeStrings",
-            Justification = "Private method which validates that the string is a Uri")]
-        [SuppressMessage(
-            "Microsoft.Usage",
-            "CA1806:DoNotIgnoreMethodResults",
-            Justification = "Uri constructor used for validation")]
-        private static void AssertAbsoluteUri(string uri, string uriName)
-        {
-            try
-            {
-                new Uri(uri, UriKind.Absolute);
-            }
-            catch (FormatException ex)
-            {
-                throw new FormatException($"${uriName} must be absolute", ex);
-            }
-        }
-
-        private static string GetEpisodeLinkText(NodeRemoteValue episodeLink)
-        {
-            var episodeLinkDiv = episodeLink.Value!.Children!.Value
-                .Single(n => n.Value?.NodeType == (long)XmlNodeType.Element);
-            Debug.Assert(
-                episodeLinkDiv.Value!.LocalName == "div",
-                "Child element of episode link is a <div>");
-
-            var episodeText = episodeLinkDiv.Value!.Children!.Value.Single();
-            Debug.Assert(
-                episodeText.Value?.NodeType == (long)XmlNodeType.Text,
-                "Child node of episode link div is #text");
-            return episodeText.Value.NodeValue!;
         }
 
         private async IAsyncEnumerable<ImdbPoster> DownloadSeasonAsync(
