@@ -240,7 +240,31 @@ namespace ImdbPosterDownloader
             }
 
             var posterLink = posterLinks.Nodes.Single();
+            var poster = await this.DownloadPosterFromLinkAsync(
+                    episodeContext,
+                    posterLink,
+                    episodeTitle,
+                    episodeDomLoadEnum,
+                    cancellationToken)
+                .ConfigureAwait(false);
 
+            await episodeContext.CloseAsync(cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+
+            return poster;
+        }
+
+        [SuppressMessage(
+            "Maintainability",
+            "CA1506:AvoidExcessiveClassCoupling",
+            Justification = "Difficulty of splitting method")]
+        private async Task<ImdbPoster> DownloadPosterFromLinkAsync(
+            BrowsingContext episodeContext,
+            NodeRemoteValue posterLink,
+            string episodeTitle,
+            IAsyncEnumerator<DomContentLoadedEventArgs> episodeDomLoadEnum,
+            CancellationToken cancellationToken)
+        {
             var responseCompletedStream =
                 await this.context.BiDi.Network.ResponseCompleted.StreamAsync(cancellationToken)
                     .ConfigureAwait(false);
@@ -287,9 +311,6 @@ namespace ImdbPosterDownloader
                     BiDiDataType.Response,
                     imageResComp.Request.Request,
                     cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-
-            await episodeContext.CloseAsync(cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
 
             return new ImdbPoster(episodeTitle, imageResComp.Response, bytes);
