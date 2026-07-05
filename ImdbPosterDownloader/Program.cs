@@ -5,6 +5,7 @@
 namespace ImdbPosterDownloader
 {
     using System;
+    using System.Collections.Generic;
     using System.Diagnostics;
     using System.IO;
     using System.Linq;
@@ -60,8 +61,18 @@ namespace ImdbPosterDownloader
             };
             foreach (var imdbUrl in imdbUrls)
             {
-                var posters = downloader.DownloadEpisodesAsync(imdbUrl).ConfigureAwait(false);
-                await foreach (var poster in posters)
+                IAsyncEnumerable<ImdbPoster> posters;
+                if (IsEpisodesUrl(imdbUrl))
+                {
+                    posters = downloader.DownloadEpisodesAsync(imdbUrl);
+                }
+                else
+                {
+                    var poster = await downloader.DownloadTitleAsync(imdbUrl).ConfigureAwait(false);
+                    posters = new[] { poster }.ToAsyncEnumerable();
+                }
+
+                await foreach (var poster in posters.ConfigureAwait(false))
                 {
                     await SavePoster(poster).ConfigureAwait(false);
                 }
@@ -80,6 +91,12 @@ namespace ImdbPosterDownloader
         private static string GetPosterFilename(string title)
         {
             return InvalidFileNameCharRegex.Replace(title, "-") + ".jpg";
+        }
+
+        private static bool IsEpisodesUrl(Uri imdbUrl)
+        {
+            var trimmedPath = imdbUrl.AbsolutePath.TrimEnd('/');
+            return trimmedPath.EndsWith("/episodes", StringComparison.Ordinal);
         }
 
         private static async Task SavePoster(
