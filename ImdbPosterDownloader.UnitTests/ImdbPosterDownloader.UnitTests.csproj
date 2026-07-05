@@ -7,6 +7,10 @@
 
     <OutputType>Exe</OutputType>
 
+    <!--
+      Exclude this project from NuGet packaging:
+      https://learn.microsoft.com/nuget/reference/msbuild-targets#pack-target-inputs
+    -->
     <IsPackable>false</IsPackable>
 
     <!--
