@@ -333,8 +333,10 @@ namespace ImdbPosterDownloader
                 episodeTitle = string.Concat(h1Texts).Trim();
             }
 
+            // Poster links in "More like this" section also match ".ipc-poster > a".
+            // Limit to "/mediaviewer/" links, which view the poster in the media viewer.
             var posterLinks = await episodeContext.LocateNodesAsync(
-                    new CssLocator("main .ipc-poster > a"),
+                    new CssLocator(".ipc-poster > a[href*=\"/mediaviewer/\"]"),
                     cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             if (posterLinks.Nodes.Length == 0)
