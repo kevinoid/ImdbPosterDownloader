@@ -9,13 +9,20 @@ A simple tool to download movie/episode poster images from
 BiDi](https://www.selenium.dev/documentation/webdriver/bidi/).
 
 
-## Introductory Example
+## Introductory Examples
 
 To download all episode posters for [Bob's
 Burgers](https://www.imdb.com/title/tt1561755/):
 
 ```sh
 ImdbPosterDownloader https://www.imdb.com/title/tt1561755/episodes/
+```
+
+To download the poster for the show [Bob's
+Burgers](https://www.imdb.com/title/tt1561755/):
+
+```sh
+ImdbPosterDownloader https://www.imdb.com/title/tt1561755/
 ```
 
 
