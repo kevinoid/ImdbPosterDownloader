@@ -36,12 +36,6 @@ ImdbPosterDownloader https://www.imdb.com/title/tt1561755/
 Currently this tool must be built from source.
 
 
-## API Docs
-
-To use this module as a library, see the [API
-Documentation](https://kevinoid.github.io/ImdbPosterDownloader/api).
-
-
 ## Contributing
 
 Contributions are welcome.  See the [Contributing Guidelines](CONTRIBUTING.md)
