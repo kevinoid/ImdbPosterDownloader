@@ -66,7 +66,12 @@ namespace ImdbPosterDownloader
                     cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
 
-            return await this.DownloadTitleAsyncCore(this.context, null, cancellationToken)
+            // Likely to get challenge on first page loaded.
+            return await this.DownloadTitleAsyncCore(
+                    this.context,
+                    episodeTitle: null,
+                    checkChallenge: true,
+                    cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -103,6 +108,32 @@ namespace ImdbPosterDownloader
                 episodeText.Value?.NodeType == (long)XmlNodeType.Text,
                 "Child node of episode link div is #text");
             return episodeText.Value.NodeValue!;
+        }
+
+        /// <summary>
+        /// Checks whether a given browsing context is on a robot challenge page.
+        /// </summary>
+        /// <param name="context">Browsing context to check.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns><c>true</c> if <paramref name="context"/> is on a robot challenge page,
+        /// otherwise <c>false</c>.</returns>
+        private static async Task<bool> IsChallengePageAsync(
+            BrowsingContext context,
+            CancellationToken cancellationToken)
+        {
+            // The bot challenge page has:
+            // - Empty <title>
+            // - <script src="https://[...].token.awswaf.com/[...]/challenge.js">
+            // - AwsWafIntegration.checkForceRefresh in <script>
+            // - "In order to continue, we need to verify that you're not a robot." in <noscript>
+            //
+            // In the current implementation, we use XPath to look for <noscript> with a descendant
+            // text node containing "robot" (limited to the first match).
+            var noscriptResult = await context.LocateNodesAsync(
+                    new XPathLocator("//noscript[descendant::text()[contains(., 'robot')]][1]"),
+                    cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+            return !noscriptResult.Nodes.IsEmpty;
         }
 
         private async IAsyncEnumerable<ImdbPoster> DownloadEpisodesAsyncCore(
@@ -238,13 +269,19 @@ namespace ImdbPosterDownloader
             Debug.Assert(gotEpisodeContext, "A new tab was opened for the episode");
             var episodeContext = contextCreatedEnum.Current.Context;
 
-            return await this.DownloadTitleAsyncCore(episodeContext, episodeTitle, cancellationToken)
+            // Don't expect challenge, since completed by episodes page.
+            return await this.DownloadTitleAsyncCore(
+                    episodeContext,
+                    episodeTitle,
+                    checkChallenge: false,
+                    cancellationToken)
                 .ConfigureAwait(false);
         }
 
         private async Task<ImdbPoster> DownloadTitleAsyncCore(
             BrowsingContext episodeContext,
             string? episodeTitle,
+            bool checkChallenge,
             CancellationToken cancellationToken)
         {
             var episodeDomLoadStream =
@@ -261,6 +298,18 @@ namespace ImdbPosterDownloader
 
             var gotEpisodeDomLoad = await episodeDomLoadEnum.MoveNextAsync().ConfigureAwait(false);
             Debug.Assert(gotEpisodeDomLoad, "DOMContentLoaded occurred in episode tab");
+
+            if (checkChallenge)
+            {
+                bool isChallengePage = await IsChallengePageAsync(episodeContext, cancellationToken)
+                    .ConfigureAwait(false);
+                if (isChallengePage)
+                {
+                    // Wait for the challenge to complete, navigate, and the destination page to load
+                    var gotRealLoad = await episodeDomLoadEnum.MoveNextAsync().ConfigureAwait(false);
+                    Debug.Assert(gotRealLoad, "DOMContentLoaded after challenge in episode tab");
+                }
+            }
 
             if (string.IsNullOrWhiteSpace(episodeTitle))
             {
