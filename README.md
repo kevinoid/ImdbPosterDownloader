@@ -4,8 +4,8 @@ IMDb Poster Downloader
 [![Build Status](https://img.shields.io/github/actions/workflow/status/kevinoid/ImdbPosterDownloader/dotnet.yml?branch=main&style=flat&label=build)](https://github.com/kevinoid/ImdbPosterDownloader/actions/workflows/dotnet.yml?query=branch%3Amain)
 [![Coverage](https://img.shields.io/codecov/c/github/kevinoid/ImdbPosterDownloader.svg?style=flat)](https://codecov.io/github/kevinoid/ImdbPosterDownloader?branch=main)
 
-Tool to download movie/episode poster images from
-[IMDB](https://www.imdb.com/) using [Selenium
+A simple tool to download movie/episode poster images from
+[IMDb](https://www.imdb.com/) using [Selenium
 BiDi](https://www.selenium.dev/documentation/webdriver/bidi/).
 
 
