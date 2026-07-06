@@ -14,19 +14,17 @@
     <!-- <ApplicationIcon>ImdbPosterDownloader.ico<ApplicationIcon> -->
 
     <!--
+      Build XML documentation.  To use and to check for errors:
+      https://learn.microsoft.com/dotnet/csharp/fundamentals/tutorials/xml-documentation
+    -->
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+
+    <!--
       Trim self-contained publish and enable trim analysis build warnings
       https://learn.microsoft.com/dotnet/core/deploying/trimming/trim-self-contained
       https://learn.microsoft.com/dotnet/core/deploying/trimming/trimming-concepts
     -->
     <PublishTrimmed>true</PublishTrimmed>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-    <DocumentationFile>bin\Debug\$(TargetFramework)\$(AssemblyName).xml</DocumentationFile>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-    <DocumentationFile>bin\Release\$(TargetFramework)\$(AssemblyName).xml</DocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>
