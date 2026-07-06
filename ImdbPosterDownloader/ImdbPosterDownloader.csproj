@@ -20,6 +20,13 @@
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
 
     <!--
+      Don't publish XML documentation files, which are unlikely to be useful
+      for users of Exe projects:
+      https://learn.microsoft.com/dotnet/core/project-sdk/msbuild-props#publishdocumentationfiles
+    -->
+    <PublishDocumentationFiles>false</PublishDocumentationFiles>
+
+    <!--
       Trim self-contained publish and enable trim analysis build warnings
       https://learn.microsoft.com/dotnet/core/deploying/trimming/trim-self-contained
       https://learn.microsoft.com/dotnet/core/deploying/trimming/trimming-concepts
