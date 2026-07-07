@@ -2,423 +2,422 @@
 // Copyright 2019-2026 Kevin Locke.  All rights reserved.
 // </copyright>
 
-namespace ImdbPosterDownloader
+namespace ImdbPosterDownloader;
+
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Xml;
+
+using OpenQA.Selenium.BiDi;
+using OpenQA.Selenium.BiDi.BrowsingContext;
+using OpenQA.Selenium.BiDi.Script;
+
+using BiDiDataType = OpenQA.Selenium.BiDi.Network.DataType;
+
+public class Downloader(BrowsingContext context)
 {
-    using System;
-    using System.Collections.Generic;
-    using System.Diagnostics;
-    using System.Diagnostics.CodeAnalysis;
-    using System.Linq;
-    using System.Runtime.CompilerServices;
-    using System.Threading;
-    using System.Threading.Tasks;
-    using System.Xml;
+    private static readonly TimeSpan ContextCreatedTimeout = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan LoadTimeout = TimeSpan.FromSeconds(60);
 
-    using OpenQA.Selenium.BiDi;
-    using OpenQA.Selenium.BiDi.BrowsingContext;
-    using OpenQA.Selenium.BiDi.Script;
+    private readonly BrowsingContext context = context ?? throw new ArgumentNullException(nameof(context));
+    private readonly IBiDi biDi = context.BiDi;
 
-    using BiDiDataType = OpenQA.Selenium.BiDi.Network.DataType;
+    public Predicate<string>? TitleFilter { get; set; }
 
-    public class Downloader(BrowsingContext context)
+    public IAsyncEnumerable<ImdbPoster> DownloadEpisodesAsync(
+        Uri episodesUrl,
+        CancellationToken cancellationToken = default)
     {
-        private static readonly TimeSpan ContextCreatedTimeout = TimeSpan.FromSeconds(10);
-        private static readonly TimeSpan LoadTimeout = TimeSpan.FromSeconds(60);
+        ArgumentNullException.ThrowIfNull(episodesUrl);
 
-        private readonly BrowsingContext context = context ?? throw new ArgumentNullException(nameof(context));
-        private readonly IBiDi biDi = context.BiDi;
-
-        public Predicate<string>? TitleFilter { get; set; }
-
-        public IAsyncEnumerable<ImdbPoster> DownloadEpisodesAsync(
-            Uri episodesUrl,
-            CancellationToken cancellationToken = default)
+        if (!episodesUrl.IsAbsoluteUri)
         {
-            ArgumentNullException.ThrowIfNull(episodesUrl);
-
-            if (!episodesUrl.IsAbsoluteUri)
-            {
-                throw new ArgumentOutOfRangeException(
-                    nameof(episodesUrl),
-                    episodesUrl,
-                    "Must be an absolute URI");
-            }
-
-            return this.DownloadEpisodesAsyncCore(episodesUrl, cancellationToken);
+            throw new ArgumentOutOfRangeException(
+                nameof(episodesUrl),
+                episodesUrl,
+                "Must be an absolute URI");
         }
 
-        public async Task<ImdbPoster> DownloadTitleAsync(
-            Uri titleUrl,
-            CancellationToken cancellationToken = default)
-        {
-            ArgumentNullException.ThrowIfNull(titleUrl);
+        return this.DownloadEpisodesAsyncCore(episodesUrl, cancellationToken);
+    }
 
-            if (!titleUrl.IsAbsoluteUri)
+    public async Task<ImdbPoster> DownloadTitleAsync(
+        Uri titleUrl,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(titleUrl);
+
+        if (!titleUrl.IsAbsoluteUri)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(titleUrl),
+                titleUrl,
+                "Must be an absolute URI");
+        }
+
+        await this.context.NavigateAsync(
+                titleUrl.ToString(),
+                cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+        // Likely to get challenge on first page loaded.
+        return await this.DownloadTitleAsyncCore(
+                this.context,
+                episodeTitle: null,
+                checkChallenge: true,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    [SuppressMessage(
+        "Microsoft.Design",
+        "CA1054:UriParametersShouldNotBeStrings",
+        Justification = "Private method which validates that the string is a Uri")]
+    [SuppressMessage(
+        "Microsoft.Usage",
+        "CA1806:DoNotIgnoreMethodResults",
+        Justification = "Uri constructor used for validation")]
+    private static void AssertAbsoluteUri(string uri, string uriName)
+    {
+        try
+        {
+            new Uri(uri, UriKind.Absolute);
+        }
+        catch (FormatException ex)
+        {
+            throw new FormatException($"${uriName} must be absolute", ex);
+        }
+    }
+
+    private static string GetEpisodeLinkText(NodeRemoteValue episodeLink)
+    {
+        var episodeLinkDiv = episodeLink.Value!.Children!.Value
+            .Single(n => n.Value?.NodeType == (long)XmlNodeType.Element);
+        Debug.Assert(
+            episodeLinkDiv.Value!.LocalName == "div",
+            "Child element of episode link is a <div>");
+
+        var episodeText = episodeLinkDiv.Value!.Children!.Value.Single();
+        Debug.Assert(
+            episodeText.Value?.NodeType == (long)XmlNodeType.Text,
+            "Child node of episode link div is #text");
+        return episodeText.Value.NodeValue!;
+    }
+
+    /// <summary>
+    /// Checks whether a given browsing context is on a robot challenge page.
+    /// </summary>
+    /// <param name="context">Browsing context to check.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns><c>true</c> if <paramref name="context"/> is on a robot challenge page,
+    /// otherwise <c>false</c>.</returns>
+    private static async Task<bool> IsChallengePageAsync(
+        BrowsingContext context,
+        CancellationToken cancellationToken)
+    {
+        // The bot challenge page has:
+        // - Empty <title>
+        // - <script src="https://[...].token.awswaf.com/[...]/challenge.js">
+        // - AwsWafIntegration.checkForceRefresh in <script>
+        // - "In order to continue, we need to verify that you're not a robot." in <noscript>
+        //
+        // In the current implementation, we use XPath to look for <noscript> with a descendant
+        // text node containing "robot" (limited to the first match).
+        var noscriptResult = await context.LocateNodesAsync(
+                new XPathLocator("//noscript[descendant::text()[contains(., 'robot')]][1]"),
+                cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        return !noscriptResult.Nodes.IsEmpty;
+    }
+
+    private async IAsyncEnumerable<ImdbPoster> DownloadEpisodesAsyncCore(
+        Uri episodesUrl,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var contextCreatedStream =
+            await this.biDi.BrowsingContext.ContextCreated.StreamAsync(cancellationToken)
+                .ConfigureAwait(false);
+        await using var contextCreatedStreamConf =
+            ((IAsyncDisposable)contextCreatedStream).ConfigureAwait(false);
+        var contextCreatedEnum = contextCreatedStream.WithTimeout(ContextCreatedTimeout)
+            .GetAsyncEnumerator(cancellationToken);
+        await using var contextCreatedEnumConf = contextCreatedEnum.ConfigureAwait(false);
+
+        var loadStream = await this.biDi.BrowsingContext.Load.StreamAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using var loadStreamConf = ((IAsyncDisposable)loadStream).ConfigureAwait(false);
+        var loadEnum = loadStream.WithTimeout(LoadTimeout)
+            .GetAsyncEnumerator(cancellationToken);
+        await using var loadEnumConf = loadEnum.ConfigureAwait(false);
+
+        await this.context.NavigateAsync(
+                episodesUrl.ToString(),
+                cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+        var gotChannel = await contextCreatedEnum.MoveNextAsync().ConfigureAwait(false);
+        Debug.Assert(gotChannel, "A new tab was opened");
+
+        while (true)
+        {
+            // Note: Wait for load event to reduce page movement from ad loading.
+            var gotLoad = await loadEnum.MoveNextAsync().ConfigureAwait(false);
+            Debug.Assert(gotLoad, "Page load occurred");
+
+            var posters = this.DownloadSeasonAsync(contextCreatedEnum, cancellationToken)
+                .ConfigureAwait(false);
+            await foreach (var poster in posters)
             {
-                throw new ArgumentOutOfRangeException(
-                    nameof(titleUrl),
-                    titleUrl,
-                    "Must be an absolute URI");
+                yield return poster;
             }
 
-            await this.context.NavigateAsync(
-                    titleUrl.ToString(),
+            var nextSeasonBtns = await this.context.LocateNodesAsync(
+                    new CssLocator("#next-season-btn"),
                     cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
-
-            // Likely to get challenge on first page loaded.
-            return await this.DownloadTitleAsyncCore(
-                    this.context,
-                    episodeTitle: null,
-                    checkChallenge: true,
-                    cancellationToken)
-                .ConfigureAwait(false);
-        }
-
-        [SuppressMessage(
-            "Microsoft.Design",
-            "CA1054:UriParametersShouldNotBeStrings",
-            Justification = "Private method which validates that the string is a Uri")]
-        [SuppressMessage(
-            "Microsoft.Usage",
-            "CA1806:DoNotIgnoreMethodResults",
-            Justification = "Uri constructor used for validation")]
-        private static void AssertAbsoluteUri(string uri, string uriName)
-        {
-            try
+            var nextSeasonBtn = nextSeasonBtns.Nodes.SingleOrDefault();
+            if (nextSeasonBtn == null)
             {
-                new Uri(uri, UriKind.Absolute);
+                break;
             }
-            catch (FormatException ex)
+
+            await this.context.ScrollIntoViewAsync(nextSeasonBtn, false, cancellationToken)
+                .ConfigureAwait(false);
+
+            await this.context.ClickAsync(nextSeasonBtn, 0, cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
+    private async IAsyncEnumerable<ImdbPoster> DownloadSeasonAsync(
+        IAsyncEnumerator<ContextCreatedEventArgs> contextCreatedEnum,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        // FIXME: Wait for episodes to load, ads to load and page to settle.
+        await Task.Delay(10000, cancellationToken).ConfigureAwait(false);
+
+        // Note: a.ipc-title-link-wrapper also used for heading links:
+        // "Contribute to this page"
+        // "User lists"
+        // "User polls"
+        // .episode-item-wrapper ancestor matches only episode title links
+        var episodeLinks = await this.context.LocateNodesAsync(
+                new CssLocator(".episode-item-wrapper a.ipc-title-link-wrapper"),
+                new LocateNodesOptions
+                {
+                    SerializationOptions = new SerializationOptions
+                    {
+                        MaxDomDepth = 2,
+                    },
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (var episodeLink in episodeLinks.Nodes)
+        {
+            string episodeTitle = GetEpisodeLinkText(episodeLink);
+
+            if (this.TitleFilter == null || this.TitleFilter(episodeTitle))
             {
-                throw new FormatException($"${uriName} must be absolute", ex);
-            }
-        }
+                ImdbPoster? poster = null;
+                try
+                {
+                    poster = await this.DownloadEpisodeAsync(
+                            episodeLink,
+                            episodeTitle,
+                            contextCreatedEnum,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                catch (MissingPosterException)
+                {
+                    // It is likely that subsequent episodes do not have posters either.
+                    // However, continue in case any does.
+                }
 
-        private static string GetEpisodeLinkText(NodeRemoteValue episodeLink)
-        {
-            var episodeLinkDiv = episodeLink.Value!.Children!.Value
-                .Single(n => n.Value?.NodeType == (long)XmlNodeType.Element);
-            Debug.Assert(
-                episodeLinkDiv.Value!.LocalName == "div",
-                "Child element of episode link is a <div>");
-
-            var episodeText = episodeLinkDiv.Value!.Children!.Value.Single();
-            Debug.Assert(
-                episodeText.Value?.NodeType == (long)XmlNodeType.Text,
-                "Child node of episode link div is #text");
-            return episodeText.Value.NodeValue!;
-        }
-
-        /// <summary>
-        /// Checks whether a given browsing context is on a robot challenge page.
-        /// </summary>
-        /// <param name="context">Browsing context to check.</param>
-        /// <param name="cancellationToken">Cancellation token.</param>
-        /// <returns><c>true</c> if <paramref name="context"/> is on a robot challenge page,
-        /// otherwise <c>false</c>.</returns>
-        private static async Task<bool> IsChallengePageAsync(
-            BrowsingContext context,
-            CancellationToken cancellationToken)
-        {
-            // The bot challenge page has:
-            // - Empty <title>
-            // - <script src="https://[...].token.awswaf.com/[...]/challenge.js">
-            // - AwsWafIntegration.checkForceRefresh in <script>
-            // - "In order to continue, we need to verify that you're not a robot." in <noscript>
-            //
-            // In the current implementation, we use XPath to look for <noscript> with a descendant
-            // text node containing "robot" (limited to the first match).
-            var noscriptResult = await context.LocateNodesAsync(
-                    new XPathLocator("//noscript[descendant::text()[contains(., 'robot')]][1]"),
-                    cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-            return !noscriptResult.Nodes.IsEmpty;
-        }
-
-        private async IAsyncEnumerable<ImdbPoster> DownloadEpisodesAsyncCore(
-            Uri episodesUrl,
-            [EnumeratorCancellation] CancellationToken cancellationToken)
-        {
-            var contextCreatedStream =
-                await this.biDi.BrowsingContext.ContextCreated.StreamAsync(cancellationToken)
-                    .ConfigureAwait(false);
-            await using var contextCreatedStreamConf =
-                ((IAsyncDisposable)contextCreatedStream).ConfigureAwait(false);
-            var contextCreatedEnum = contextCreatedStream.WithTimeout(ContextCreatedTimeout)
-                .GetAsyncEnumerator(cancellationToken);
-            await using var contextCreatedEnumConf = contextCreatedEnum.ConfigureAwait(false);
-
-            var loadStream = await this.biDi.BrowsingContext.Load.StreamAsync(cancellationToken)
-                .ConfigureAwait(false);
-            await using var loadStreamConf = ((IAsyncDisposable)loadStream).ConfigureAwait(false);
-            var loadEnum = loadStream.WithTimeout(LoadTimeout)
-                .GetAsyncEnumerator(cancellationToken);
-            await using var loadEnumConf = loadEnum.ConfigureAwait(false);
-
-            await this.context.NavigateAsync(
-                    episodesUrl.ToString(),
-                    cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-
-            var gotChannel = await contextCreatedEnum.MoveNextAsync().ConfigureAwait(false);
-            Debug.Assert(gotChannel, "A new tab was opened");
-
-            while (true)
-            {
-                // Note: Wait for load event to reduce page movement from ad loading.
-                var gotLoad = await loadEnum.MoveNextAsync().ConfigureAwait(false);
-                Debug.Assert(gotLoad, "Page load occurred");
-
-                var posters = this.DownloadSeasonAsync(contextCreatedEnum, cancellationToken)
-                    .ConfigureAwait(false);
-                await foreach (var poster in posters)
+                if (poster != null)
                 {
                     yield return poster;
                 }
+            }
+        }
+    }
 
-                var nextSeasonBtns = await this.context.LocateNodesAsync(
-                        new CssLocator("#next-season-btn"),
-                        cancellationToken: cancellationToken)
-                    .ConfigureAwait(false);
-                var nextSeasonBtn = nextSeasonBtns.Nodes.SingleOrDefault();
-                if (nextSeasonBtn == null)
-                {
-                    break;
-                }
+    private async Task<ImdbPoster> DownloadEpisodeAsync(
+        NodeRemoteValue episodeLink,
+        string episodeTitle,
+        IAsyncEnumerator<ContextCreatedEventArgs> contextCreatedEnum,
+        CancellationToken cancellationToken)
+    {
+        // Scroll the link into view, then click it.
+        // Note: Navigating without clicking link causes captcha.
+        await this.context.ScrollIntoViewAsync(episodeLink, false, cancellationToken)
+            .ConfigureAwait(false);
 
-                await this.context.ScrollIntoViewAsync(nextSeasonBtn, false, cancellationToken)
-                    .ConfigureAwait(false);
+        // Note: Button 1 (middle) to open in new window
+        await this.context.ClickAsync(episodeLink, 1, cancellationToken).ConfigureAwait(false);
 
-                await this.context.ClickAsync(nextSeasonBtn, 0, cancellationToken)
-                    .ConfigureAwait(false);
+        var gotEpisodeContext = await contextCreatedEnum
+            .MoveNextUntilAsync(context => context.Parent == null)
+            .ConfigureAwait(false);
+        Debug.Assert(gotEpisodeContext, "A new tab was opened for the episode");
+        var episodeContext = contextCreatedEnum.Current.Context;
+
+        // Don't expect challenge, since completed by episodes page.
+        return await this.DownloadTitleAsyncCore(
+                episodeContext,
+                episodeTitle,
+                checkChallenge: false,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<ImdbPoster> DownloadTitleAsyncCore(
+        BrowsingContext episodeContext,
+        string? episodeTitle,
+        bool checkChallenge,
+        CancellationToken cancellationToken)
+    {
+        var episodeDomLoadStream =
+            await episodeContext.DomContentLoaded.StreamAsync(cancellationToken)
+                .ConfigureAwait(false);
+        await using var episodeDomLoadStreamConf =
+            ((IAsyncDisposable)episodeDomLoadStream).ConfigureAwait(false);
+        var episodeDomLoadEnum = episodeDomLoadStream.WithTimeout(LoadTimeout)
+            .GetAsyncEnumerator(cancellationToken);
+        await using var episodeDomLoadEnumConf = episodeDomLoadEnum.ConfigureAwait(false);
+
+        await episodeContext.ActivateAsync(cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+        var gotEpisodeDomLoad = await episodeDomLoadEnum.MoveNextAsync().ConfigureAwait(false);
+        Debug.Assert(gotEpisodeDomLoad, "DOMContentLoaded occurred in episode tab");
+
+        if (checkChallenge)
+        {
+            bool isChallengePage = await IsChallengePageAsync(episodeContext, cancellationToken)
+                .ConfigureAwait(false);
+            if (isChallengePage)
+            {
+                // Wait for the challenge to complete, navigate, and the destination page to load
+                var gotRealLoad = await episodeDomLoadEnum.MoveNextAsync().ConfigureAwait(false);
+                Debug.Assert(gotRealLoad, "DOMContentLoaded after challenge in episode tab");
             }
         }
 
-        private async IAsyncEnumerable<ImdbPoster> DownloadSeasonAsync(
-            IAsyncEnumerator<ContextCreatedEventArgs> contextCreatedEnum,
-            [EnumeratorCancellation] CancellationToken cancellationToken)
+        if (string.IsNullOrWhiteSpace(episodeTitle))
         {
-            // FIXME: Wait for episodes to load, ads to load and page to settle.
-            await Task.Delay(10000, cancellationToken).ConfigureAwait(false);
-
-            // Note: a.ipc-title-link-wrapper also used for heading links:
-            // "Contribute to this page"
-            // "User lists"
-            // "User polls"
-            // .episode-item-wrapper ancestor matches only episode title links
-            var episodeLinks = await this.context.LocateNodesAsync(
-                    new CssLocator(".episode-item-wrapper a.ipc-title-link-wrapper"),
+            // Note: locateNodes doesn't match text() nodes.
+            // Get element nodes and extract
+            var h1Nodes = await episodeContext.LocateNodesAsync(
+                    new CssLocator("h1"),
                     new LocateNodesOptions
                     {
                         SerializationOptions = new SerializationOptions
                         {
-                            MaxDomDepth = 2,
+                            MaxDomDepth = 10,
                         },
                     },
-                    cancellationToken)
+                    cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
-
-            foreach (var episodeLink in episodeLinks.Nodes)
-            {
-                string episodeTitle = GetEpisodeLinkText(episodeLink);
-
-                if (this.TitleFilter == null || this.TitleFilter(episodeTitle))
-                {
-                    ImdbPoster? poster = null;
-                    try
-                    {
-                        poster = await this.DownloadEpisodeAsync(
-                                episodeLink,
-                                episodeTitle,
-                                contextCreatedEnum,
-                                cancellationToken)
-                            .ConfigureAwait(false);
-                    }
-                    catch (MissingPosterException)
-                    {
-                        // It is likely that subsequent episodes do not have posters either.
-                        // However, continue in case any does.
-                    }
-
-                    if (poster != null)
-                    {
-                        yield return poster;
-                    }
-                }
-            }
+            var h1Node = h1Nodes.Nodes.Single();
+            var h1Texts = h1Node.GetDescendants()
+                .Where(node => node.Value?.NodeType == (long)XmlNodeType.Text)
+                .Select(textNode => textNode.Value!.NodeValue);
+            episodeTitle = string.Concat(h1Texts).Trim();
         }
 
-        private async Task<ImdbPoster> DownloadEpisodeAsync(
-            NodeRemoteValue episodeLink,
-            string episodeTitle,
-            IAsyncEnumerator<ContextCreatedEventArgs> contextCreatedEnum,
-            CancellationToken cancellationToken)
+        // Poster links in "More like this" section also match ".ipc-poster > a".
+        // Limit to "/mediaviewer/" links, which view the poster in the media viewer.
+        var posterLinks = await episodeContext.LocateNodesAsync(
+                new CssLocator(".ipc-poster > a[href*=\"/mediaviewer/\"]"),
+                cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        if (posterLinks.Nodes.Length == 0)
         {
-            // Scroll the link into view, then click it.
-            // Note: Navigating without clicking link causes captcha.
-            await this.context.ScrollIntoViewAsync(episodeLink, false, cancellationToken)
-                .ConfigureAwait(false);
-
-            // Note: Button 1 (middle) to open in new window
-            await this.context.ClickAsync(episodeLink, 1, cancellationToken).ConfigureAwait(false);
-
-            var gotEpisodeContext = await contextCreatedEnum
-                .MoveNextUntilAsync(context => context.Parent == null)
-                .ConfigureAwait(false);
-            Debug.Assert(gotEpisodeContext, "A new tab was opened for the episode");
-            var episodeContext = contextCreatedEnum.Current.Context;
-
-            // Don't expect challenge, since completed by episodes page.
-            return await this.DownloadTitleAsyncCore(
-                    episodeContext,
-                    episodeTitle,
-                    checkChallenge: false,
-                    cancellationToken)
-                .ConfigureAwait(false);
+            throw new MissingPosterException();
         }
 
-        private async Task<ImdbPoster> DownloadTitleAsyncCore(
-            BrowsingContext episodeContext,
-            string? episodeTitle,
-            bool checkChallenge,
-            CancellationToken cancellationToken)
-        {
-            var episodeDomLoadStream =
-                await episodeContext.DomContentLoaded.StreamAsync(cancellationToken)
-                    .ConfigureAwait(false);
-            await using var episodeDomLoadStreamConf =
-                ((IAsyncDisposable)episodeDomLoadStream).ConfigureAwait(false);
-            var episodeDomLoadEnum = episodeDomLoadStream.WithTimeout(LoadTimeout)
-                .GetAsyncEnumerator(cancellationToken);
-            await using var episodeDomLoadEnumConf = episodeDomLoadEnum.ConfigureAwait(false);
+        var posterLink = posterLinks.Nodes.Single();
+        var poster = await this.DownloadPosterFromLinkAsync(
+                episodeContext,
+                posterLink,
+                episodeTitle,
+                episodeDomLoadEnum,
+                cancellationToken)
+            .ConfigureAwait(false);
 
-            await episodeContext.ActivateAsync(cancellationToken: cancellationToken)
+        await episodeContext.CloseAsync(cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+        return poster;
+    }
+
+    [SuppressMessage(
+        "Maintainability",
+        "CA1506:AvoidExcessiveClassCoupling",
+        Justification = "Difficulty of splitting method")]
+    private async Task<ImdbPoster> DownloadPosterFromLinkAsync(
+        BrowsingContext episodeContext,
+        NodeRemoteValue posterLink,
+        string episodeTitle,
+        IAsyncEnumerator<DomContentLoadedEventArgs> episodeDomLoadEnum,
+        CancellationToken cancellationToken)
+    {
+        var responseCompletedStream =
+            await this.context.BiDi.Network.ResponseCompleted.StreamAsync(cancellationToken)
                 .ConfigureAwait(false);
+        await using var responseCompletedStreamConf =
+            ((IAsyncDisposable)responseCompletedStream).ConfigureAwait(false);
 
-            var gotEpisodeDomLoad = await episodeDomLoadEnum.MoveNextAsync().ConfigureAwait(false);
-            Debug.Assert(gotEpisodeDomLoad, "DOMContentLoaded occurred in episode tab");
+        // Note: BiDiException from Edge if value is above 200,000,000:
+        // "invalid argument: Max encoded data size should be between 1 and 200000000"
+        var result = await this.context.BiDi.Network.AddDataCollectorAsync(
+                [BiDiDataType.Response],
+                10 * 1024 * 1024,
+                cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        await using var collectorWrapper =
+            new CollectorWrapper(result.Collector).ConfigureAwait(false);
 
-            if (checkChallenge)
+        await episodeContext.ClickAsync(posterLink, 0, cancellationToken)
+            .ConfigureAwait(false);
+
+        var gotPosterDomLoad = await episodeDomLoadEnum.MoveNextAsync().ConfigureAwait(false);
+        Debug.Assert(gotPosterDomLoad, "DOMContentLoaded occurred in episode tab");
+
+        var mediaImgs = await episodeContext.LocateNodesAsync(
+                new CssLocator(".media-viewer img:not(.peek)"),
+                cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        var lightboxImg = mediaImgs.Nodes.Single();
+        var lightboxImgSourceSet = lightboxImg.Value!.GetSourceSet()
+            .Select(srcsetUrl =>
             {
-                bool isChallengePage = await IsChallengePageAsync(episodeContext, cancellationToken)
-                    .ConfigureAwait(false);
-                if (isChallengePage)
-                {
-                    // Wait for the challenge to complete, navigate, and the destination page to load
-                    var gotRealLoad = await episodeDomLoadEnum.MoveNextAsync().ConfigureAwait(false);
-                    Debug.Assert(gotRealLoad, "DOMContentLoaded after challenge in episode tab");
-                }
-            }
+                AssertAbsoluteUri(srcsetUrl, "Poster srcset URL");
+                return srcsetUrl;
+            })
+            .ToHashSet();
 
-            if (string.IsNullOrWhiteSpace(episodeTitle))
-            {
-                // Note: locateNodes doesn't match text() nodes.
-                // Get element nodes and extract
-                var h1Nodes = await episodeContext.LocateNodesAsync(
-                        new CssLocator("h1"),
-                        new LocateNodesOptions
-                        {
-                            SerializationOptions = new SerializationOptions
-                            {
-                                MaxDomDepth = 10,
-                            },
-                        },
-                        cancellationToken: cancellationToken)
-                    .ConfigureAwait(false);
-                var h1Node = h1Nodes.Nodes.Single();
-                var h1Texts = h1Node.GetDescendants()
-                    .Where(node => node.Value?.NodeType == (long)XmlNodeType.Text)
-                    .Select(textNode => textNode.Value!.NodeValue);
-                episodeTitle = string.Concat(h1Texts).Trim();
-            }
+        using var linkedSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var imageResComp = await responseCompletedStream.FirstAsync(
+                rc => lightboxImgSourceSet.Contains(rc.Response.Url),
+                linkedSource.Token)
+            .AsTask()
+            .WaitCancelAsync(LoadTimeout, linkedSource)
+            .ConfigureAwait(false);
+        var bytes = await this.context.BiDi.Network.GetDataAsync(
+                BiDiDataType.Response,
+                imageResComp.Request.Request,
+                cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
 
-            // Poster links in "More like this" section also match ".ipc-poster > a".
-            // Limit to "/mediaviewer/" links, which view the poster in the media viewer.
-            var posterLinks = await episodeContext.LocateNodesAsync(
-                    new CssLocator(".ipc-poster > a[href*=\"/mediaviewer/\"]"),
-                    cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-            if (posterLinks.Nodes.Length == 0)
-            {
-                throw new MissingPosterException();
-            }
-
-            var posterLink = posterLinks.Nodes.Single();
-            var poster = await this.DownloadPosterFromLinkAsync(
-                    episodeContext,
-                    posterLink,
-                    episodeTitle,
-                    episodeDomLoadEnum,
-                    cancellationToken)
-                .ConfigureAwait(false);
-
-            await episodeContext.CloseAsync(cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-
-            return poster;
-        }
-
-        [SuppressMessage(
-            "Maintainability",
-            "CA1506:AvoidExcessiveClassCoupling",
-            Justification = "Difficulty of splitting method")]
-        private async Task<ImdbPoster> DownloadPosterFromLinkAsync(
-            BrowsingContext episodeContext,
-            NodeRemoteValue posterLink,
-            string episodeTitle,
-            IAsyncEnumerator<DomContentLoadedEventArgs> episodeDomLoadEnum,
-            CancellationToken cancellationToken)
-        {
-            var responseCompletedStream =
-                await this.context.BiDi.Network.ResponseCompleted.StreamAsync(cancellationToken)
-                    .ConfigureAwait(false);
-            await using var responseCompletedStreamConf =
-                ((IAsyncDisposable)responseCompletedStream).ConfigureAwait(false);
-
-            // Note: BiDiException from Edge if value is above 200,000,000:
-            // "invalid argument: Max encoded data size should be between 1 and 200000000"
-            var result = await this.context.BiDi.Network.AddDataCollectorAsync(
-                    [BiDiDataType.Response],
-                    10 * 1024 * 1024,
-                    cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-            await using var collectorWrapper =
-                new CollectorWrapper(result.Collector).ConfigureAwait(false);
-
-            await episodeContext.ClickAsync(posterLink, 0, cancellationToken)
-                .ConfigureAwait(false);
-
-            var gotPosterDomLoad = await episodeDomLoadEnum.MoveNextAsync().ConfigureAwait(false);
-            Debug.Assert(gotPosterDomLoad, "DOMContentLoaded occurred in episode tab");
-
-            var mediaImgs = await episodeContext.LocateNodesAsync(
-                    new CssLocator(".media-viewer img:not(.peek)"),
-                    cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-            var lightboxImg = mediaImgs.Nodes.Single();
-            var lightboxImgSourceSet = lightboxImg.Value!.GetSourceSet()
-                .Select(srcsetUrl =>
-                {
-                    AssertAbsoluteUri(srcsetUrl, "Poster srcset URL");
-                    return srcsetUrl;
-                })
-                .ToHashSet();
-
-            using var linkedSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            var imageResComp = await responseCompletedStream.FirstAsync(
-                    rc => lightboxImgSourceSet.Contains(rc.Response.Url),
-                    linkedSource.Token)
-                .AsTask()
-                .WaitCancelAsync(LoadTimeout, linkedSource)
-                .ConfigureAwait(false);
-            var bytes = await this.context.BiDi.Network.GetDataAsync(
-                    BiDiDataType.Response,
-                    imageResComp.Request.Request,
-                    cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-
-            return new ImdbPoster(episodeTitle, imageResComp.Response, bytes);
-        }
+        return new ImdbPoster(episodeTitle, imageResComp.Response, bytes);
     }
 }

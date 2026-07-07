@@ -2,12 +2,11 @@
 // Copyright 2019-2026 Kevin Locke.  All rights reserved.
 // </copyright>
 
-namespace ImdbPosterDownloader
-{
-    using OpenQA.Selenium.BiDi.Network;
+namespace ImdbPosterDownloader;
 
-    public record ImdbPoster(
-        string Title,
-        ResponseData Response,
-        BytesValue Bytes);
-}
+using OpenQA.Selenium.BiDi.Network;
+
+public record ImdbPoster(
+    string Title,
+    ResponseData Response,
+    BytesValue Bytes);

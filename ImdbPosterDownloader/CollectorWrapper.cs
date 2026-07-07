@@ -2,27 +2,26 @@
 // Copyright 2019-2026 Kevin Locke.  All rights reserved.
 // </copyright>
 
-namespace ImdbPosterDownloader
+namespace ImdbPosterDownloader;
+
+using System;
+using System.Threading.Tasks;
+
+using OpenQA.Selenium.BiDi.Network;
+
+internal sealed class CollectorWrapper(Collector collector) : IAsyncDisposable
 {
-    using System;
-    using System.Threading.Tasks;
+    private bool disposedValue;
 
-    using OpenQA.Selenium.BiDi.Network;
+    public Collector Collector => collector;
 
-    internal sealed class CollectorWrapper(Collector collector) : IAsyncDisposable
+    public async ValueTask DisposeAsync()
     {
-        private bool disposedValue;
-
-        public Collector Collector => collector;
-
-        public async ValueTask DisposeAsync()
+        if (!this.disposedValue)
         {
-            if (!this.disposedValue)
-            {
-                await collector.BiDi.Network.RemoveDataCollectorAsync(collector)
-                    .ConfigureAwait(false);
-                this.disposedValue = true;
-            }
+            await collector.BiDi.Network.RemoveDataCollectorAsync(collector)
+                .ConfigureAwait(false);
+            this.disposedValue = true;
         }
     }
 }
