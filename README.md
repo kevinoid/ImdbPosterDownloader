@@ -33,7 +33,9 @@ ImdbPosterDownloader https://www.imdb.com/title/tt1561755/
 
 ## Installation
 
-Currently this tool must be built from source.
+Download and unzip the binaries for the [latest
+release](https://github.com/kevinoid/ImdbPosterDownloader/releases/latest)
+from GitHub.
 
 
 ## Contributing
