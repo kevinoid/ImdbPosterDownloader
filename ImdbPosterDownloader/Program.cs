@@ -7,15 +7,17 @@ namespace ImdbPosterDownloader
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
+    using System.Diagnostics.CodeAnalysis;
     using System.IO;
     using System.Linq;
     using System.Text.RegularExpressions;
     using System.Threading;
     using System.Threading.Tasks;
 
+    using OpenQA.Selenium;
     using OpenQA.Selenium.BiDi;
     using OpenQA.Selenium.BiDi.Network;
-    using OpenQA.Selenium.Firefox;
+    using OpenQA.Selenium.Manager;
 
     public static class Program
     {
@@ -39,10 +41,7 @@ namespace ImdbPosterDownloader
             // Validate arguments early to avoid browser startup on error
             var imdbUrls = args.Select(arg => new Uri(arg, UriKind.Absolute)).ToArray();
 
-            var webDriver = new FirefoxDriver(new FirefoxOptions()
-            {
-                UseWebSocketUrl = true,
-            });
+            var webDriver = await GetAnyWebDriver().ConfigureAwait(false);
             await using var webDriverConf = webDriver.ConfigureAwait(false);
 
             var biDi = await webDriver.AsBiDiAsync().ConfigureAwait(false);
@@ -91,6 +90,84 @@ namespace ImdbPosterDownloader
         private static string GetPosterFilename(string title)
         {
             return InvalidFileNameCharRegex.Replace(title, "-") + ".jpg";
+        }
+
+        [SuppressMessage(
+            "StyleCop.CSharp.SpacingRules",
+            "SA1009:ClosingParenthesisMustBeSpacedCorrectly",
+            Justification = "Array of multi-line tuples looks better balanced and indented")]
+        private static async Task<WebDriver> GetAnyWebDriver(
+            CancellationToken cancellationToken = default)
+        {
+            // Pairs SeleniumManager driver name with a driver factory function.
+            // In preference order.
+            var driverPairs = new (string DriverName, Func<WebDriver> Factory)[]
+            {
+                (
+                    "firefox",
+                    () => new OpenQA.Selenium.Firefox.FirefoxDriver(
+                        new OpenQA.Selenium.Firefox.FirefoxOptions()
+                        {
+                            UseWebSocketUrl = true,
+                        })
+                ),
+                (
+                    "chrome",
+                    () => new OpenQA.Selenium.Chrome.ChromeDriver(
+                        new OpenQA.Selenium.Chrome.ChromeOptions()
+                        {
+                            UseWebSocketUrl = true,
+                        })
+                ),
+                (
+                    "edge",
+                    () => new OpenQA.Selenium.Edge.EdgeDriver(
+                        new OpenQA.Selenium.Edge.EdgeOptions()
+                        {
+                            UseWebSocketUrl = true,
+                        })
+                ),
+                (
+                    "safari",
+                    () => new OpenQA.Selenium.Safari.SafariDriver(
+                        new OpenQA.Selenium.Safari.SafariOptions()
+                        {
+                            UseWebSocketUrl = true,
+                        })
+                ),
+            };
+
+            // Search for browsers concurrently
+            var resultTasks = driverPairs
+                .Select((driverPair) => SeleniumManager.DiscoverBrowserAsync(
+                    driverPair.DriverName,
+                    cancellationToken: cancellationToken))
+                .ToArray();
+
+            // Check results, returning the first found
+            for (var i = 0; i < resultTasks.Length; i++)
+            {
+                BrowserDiscoveryResult result;
+                try
+                {
+                    result = await resultTasks[i].ConfigureAwait(false);
+                }
+                catch (WebDriverException)
+                {
+                    // Driver not found.  Continue searching.
+                    continue;
+                }
+
+                if (Path.Exists(result.BrowserPath))
+                {
+                    var driverFactory = driverPairs[i].Factory;
+                    return driverFactory();
+                }
+            }
+
+            // No browser is installed.  Let SeleniumManager download one.
+            var defaultDriverFactory = driverPairs[0].Factory;
+            return defaultDriverFactory();
         }
 
         private static bool IsEpisodesUrl(Uri imdbUrl)
