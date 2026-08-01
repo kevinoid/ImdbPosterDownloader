@@ -103,7 +103,7 @@ public class Downloader(BrowsingContext context)
             episodeLinkDiv.Value!.LocalName == "div",
             "Child element of episode link is a <div>");
 
-        var episodeText = episodeLinkDiv.Value!.Children!.Value.Single();
+        var episodeText = episodeLinkDiv.Value.Children!.Value.Single();
         Debug.Assert(
             episodeText.Value?.NodeType == (long)XmlNodeType.Text,
             "Child node of episode link div is #text");

@@ -27,7 +27,7 @@ internal static class NodePropertiesExtensions
             yield return src.Trim(HtmlParserUtils.AsciiWhitespaceChars);
         }
 
-        if (nodeProperties.Attributes!.TryGetValue("srcset", out var srcset)
+        if (nodeProperties.Attributes.TryGetValue("srcset", out var srcset)
             && !string.IsNullOrWhiteSpace(srcset))
         {
             foreach (var url in HtmlParserUtils.GetSrcsetUrls(srcset))
