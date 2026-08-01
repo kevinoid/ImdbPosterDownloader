@@ -55,7 +55,11 @@ public static class TaskWaitExtensions
             throw new ArgumentOutOfRangeException(nameof(timeout), timeout, "Must be non-negative");
         }
 
-        var delayTask = Task.Delay(timeout);
+        // No need to cancel Delay from cancellationSource.
+        // Cancellation should cause task to complete soon.
+        // Whether or not it does, it must still be awaited, so there's no
+        // benefit to cancelling Delay.
+        var delayTask = Task.Delay(timeout, CancellationToken.None);
         var winner = await Task.WhenAny(delayTask, task).ConfigureAwait(false);
         if (winner == task)
         {
