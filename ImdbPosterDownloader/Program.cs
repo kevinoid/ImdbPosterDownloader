@@ -23,7 +23,8 @@ public static class Program
 {
     private static readonly Regex InvalidFileNameCharRegex = new(
         CharsToRegexSet(Path.GetInvalidFileNameChars()),
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(1));
 
     public static async Task<int> Main(string[] args)
     {
