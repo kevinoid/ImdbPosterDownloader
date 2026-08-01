@@ -144,15 +144,16 @@ public class Downloader(BrowsingContext context)
             await this.biDi.BrowsingContext.ContextCreated.StreamAsync(cancellationToken)
                 .ConfigureAwait(false);
         await using var contextCreatedStreamConf =
-            ((IAsyncDisposable)contextCreatedStream).ConfigureAwait(false);
-        var contextCreatedEnum = contextCreatedStream.WithTimeout(ContextCreatedTimeout)
+            contextCreatedStream.ConfigureAwait(false);
+        var contextCreatedEnum = contextCreatedStream.ReadAllAsync(cancellationToken)
+            .WithTimeout(ContextCreatedTimeout)
             .GetAsyncEnumerator(cancellationToken);
         await using var contextCreatedEnumConf = contextCreatedEnum.ConfigureAwait(false);
 
         var loadStream = await this.biDi.BrowsingContext.Load.StreamAsync(cancellationToken)
             .ConfigureAwait(false);
-        await using var loadStreamConf = ((IAsyncDisposable)loadStream).ConfigureAwait(false);
-        var loadEnum = loadStream.WithTimeout(LoadTimeout)
+        await using var loadStreamConf = loadStream.ConfigureAwait(false);
+        var loadEnum = loadStream.ReadAllAsync(cancellationToken).WithTimeout(LoadTimeout)
             .GetAsyncEnumerator(cancellationToken);
         await using var loadEnumConf = loadEnum.ConfigureAwait(false);
 
@@ -288,8 +289,9 @@ public class Downloader(BrowsingContext context)
             await episodeContext.DomContentLoaded.StreamAsync(cancellationToken)
                 .ConfigureAwait(false);
         await using var episodeDomLoadStreamConf =
-            ((IAsyncDisposable)episodeDomLoadStream).ConfigureAwait(false);
-        var episodeDomLoadEnum = episodeDomLoadStream.WithTimeout(LoadTimeout)
+            episodeDomLoadStream.ConfigureAwait(false);
+        var episodeDomLoadEnum = episodeDomLoadStream.ReadAllAsync(cancellationToken)
+            .WithTimeout(LoadTimeout)
             .GetAsyncEnumerator(cancellationToken);
         await using var episodeDomLoadEnumConf = episodeDomLoadEnum.ConfigureAwait(false);
 
@@ -374,7 +376,7 @@ public class Downloader(BrowsingContext context)
             await this.context.BiDi.Network.ResponseCompleted.StreamAsync(cancellationToken)
                 .ConfigureAwait(false);
         await using var responseCompletedStreamConf =
-            ((IAsyncDisposable)responseCompletedStream).ConfigureAwait(false);
+            responseCompletedStream.ConfigureAwait(false);
 
         // Note: BiDiException from Edge if value is above 200,000,000:
         // "invalid argument: Max encoded data size should be between 1 and 200000000"
@@ -406,7 +408,8 @@ public class Downloader(BrowsingContext context)
             .ToHashSet();
 
         using var linkedSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var imageResComp = await responseCompletedStream.FirstAsync(
+        var imageResComp = await responseCompletedStream.ReadAllAsync(cancellationToken)
+            .FirstAsync(
                 rc => lightboxImgSourceSet.Contains(rc.Response.Url),
                 linkedSource.Token)
             .AsTask()
