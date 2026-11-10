@@ -3,7 +3,7 @@
   <PropertyGroup>
     <Description>Tool to download movie/episode poster images from IMDb using Selenium BiDi.</Description>
 
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
 
     <OutputType>Exe</OutputType>
 
